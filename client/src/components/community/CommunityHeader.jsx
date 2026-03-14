@@ -18,7 +18,7 @@ export default function CommunityHeader({ community }) {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4">
                  <div className="flex items-end gap-4 -mt-12 relative z-10 w-full sm:w-auto">
                      {/* Icon */}
-                     <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-brand-bg border-4 border-brand-bg flex items-center justify-center overflow-hidden shrink-0 shadow-2xl">
+                     <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-brand-bg border-4 border-brand-bg flex items-center justify-center overflow-hidden shrink-0 shadow-xl">
                          {community.iconUrl ? (
                              <img src={community.iconUrl} alt="Icon" className="w-full h-full object-cover" />
                          ) : (

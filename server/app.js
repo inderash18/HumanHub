@@ -15,8 +15,12 @@ import waitlistRoutes from './routes/waitlist.js';
 
 const app = express();
 
+// Trust the first proxy (nginx) for correct IP and X-Forwarded headers
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors({ origin: process.env.VITE_API_URL || '*', credentials: true }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

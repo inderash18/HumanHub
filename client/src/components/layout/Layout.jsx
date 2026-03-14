@@ -1,25 +1,36 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
-import Footer from './Footer';
 
 export default function Layout() {
     const location = useLocation();
     const isMarketingPage = location.pathname === '/';
+    const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
 
     return (
-        <div className="min-h-screen flex flex-col bg-brand-bg relative">
+        <div style={{ minHeight: '100vh', background: '#dae0e6', display: 'flex', flexDirection: 'column' }}>
             <Navbar />
-            
-            <div className={`flex-1 flex w-full max-w-[1400px] mx-auto ${isMarketingPage ? '' : 'px-4 lg:px-8 pt-16'}`}>
-                {!isMarketingPage && <Sidebar />}
-                
-                <main className={`flex-1 min-w-0 ${isMarketingPage ? '' : 'py-6 px-4 lg:px-8'}`}>
+
+            {isAuthPage ? (
+                <main style={{ paddingTop: '48px', flex: 1 }}>
                     <Outlet />
                 </main>
-            </div>
-            
-            {isMarketingPage && <Footer />}
+            ) : isMarketingPage ? (
+                <main style={{ flex: 1 }}>
+                    <Outlet />
+                </main>
+            ) : (
+                <div style={{ paddingTop: '48px', flex: 1, display: 'flex', justifyContent: 'center' }}>
+                    <div style={{ display: 'flex', width: '100%', maxWidth: '1200px', padding: '20px 24px', gap: '24px' }}>
+                        {/* Left sidebar */}
+                        <Sidebar />
+                        {/* Main content */}
+                        <main style={{ flex: 1, minWidth: 0 }}>
+                            <Outlet />
+                        </main>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

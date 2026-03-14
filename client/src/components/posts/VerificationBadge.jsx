@@ -1,34 +1,39 @@
-import { RiShieldCheckFill, RiErrorWarningFill, RiShieldStarLine } from 'react-icons/ri';
-import Badge from '../ui/Badge';
-import { scoreToPercentage } from '../../utils/formatters';
+export default function VerificationBadge({ scores, status }) {
+    // Determine if flagged
+    const isFlagged = status === 'flagged' || status === 'removed';
+    const isReviewing = status === 'under_review';
+    const aiScore = scores?.text?.score || scores?.combined || 0;
+    const isHighRisk = aiScore > 0.7;
 
-export default function VerificationBadge({ scores, status, showDetail = false }) {
-    if (status === 'pending') {
+    if (isFlagged) {
         return (
-            <Badge variant="default" className="gap-1 px-2 pr-3 py-1 bg-white/5 animate-pulse">
-                <RiShieldStarLine className="text-brand-gold opacity-50" />
-                <span className="text-white/60">Verifying...</span>
-            </Badge>
+            <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: '3px',
+                padding: '1px 6px', borderRadius: '10px',
+                background: '#fff0ed', border: '1px solid #ff4500',
+                color: '#ff4500', fontSize: '11px', fontWeight: 700
+            }}>
+                🚫 Flagged
+            </span>
         );
     }
 
-    if (status === 'published') {
+    if (isReviewing || isHighRisk) {
         return (
-            <Badge variant="success" className="gap-1.5 px-2.5 py-1 bg-brand-success/10 border-brand-success/30">
-                <RiShieldCheckFill className="text-brand-success text-sm" />
-                <span className="text-white uppercase tracking-wider scale-90 origin-left">Verified Human</span>
-            </Badge>
+            <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: '3px',
+                padding: '1px 6px', borderRadius: '10px',
+                background: '#fff8e1', border: '1px solid #f9a825',
+                color: '#e65100', fontSize: '11px', fontWeight: 700
+            }}>
+                🔍 Under Review
+            </span>
         );
     }
 
-    if (status === 'rejected' || status === 'removed') {
-        return (
-            <Badge variant="danger" className="gap-1.5 px-2.5 py-1 bg-brand-danger/10 border-brand-danger/30">
-                <RiErrorWarningFill className="text-brand-danger text-sm" />
-                <span className="text-white uppercase tracking-wider scale-90 origin-left">Bot Flagged</span>
-            </Badge>
-        );
-    }
-
-    return null;
+    return (
+        <span className="human-badge">
+            ✅ Human
+        </span>
+    );
 }

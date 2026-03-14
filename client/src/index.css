@@ -1,38 +1,310 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Noto+Sans:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  * {
+    box-sizing: border-box;
+  }
+
   body {
-    @apply bg-brand-bg text-brand-text font-jakarta antialiased selection:bg-brand-gold-dim selection:text-brand-gold overflow-x-hidden;
+    background-color: #dae0e6;
+    color: #1c1c1c;
+    font-family: 'IBM Plex Sans', 'Noto Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-playfair tracking-tight;
+  .dark body {
+    background-color: #dae0e6;
   }
 }
 
-.glass {
-  background: rgba(17, 17, 21, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+/* Reddit exact scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #edeff1;
+}
+::-webkit-scrollbar-thumb {
+  background: #a5a4a4;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #818384;
 }
 
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Reddit card style */
+.reddit-card {
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  transition: border-color 0.1s ease;
+}
+.reddit-card:hover {
+  border-color: #898989;
+  cursor: pointer;
 }
 
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+/* Reddit vote button */
+.vote-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 2px;
+  color: #878a8c;
+  cursor: pointer;
+  transition: background-color 0.1s, color 0.1s;
+}
+.vote-btn:hover {
+  background-color: #e2e2e2;
+}
+.vote-btn.upvoted {
+  color: #ff4500;
+}
+.vote-btn.downvoted {
+  color: #7193ff;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+/* Reddit action button style */
+.reddit-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #878a8c;
+  cursor: pointer;
+  transition: background-color 0.1s;
+  white-space: nowrap;
+}
+.reddit-action-btn:hover {
+  background-color: #e2e2e2;
+  color: #1c1c1c;
+}
+
+/* Reddit pill tag */
+.reddit-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+/* Reddit input */
+.reddit-input {
+  background: #f6f7f8;
+  border: 1px solid #edeff1;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.reddit-input:focus {
+  background: #ffffff;
+  border-color: #0079d3;
+  box-shadow: 0 0 0 1px #0079d3;
+}
+.reddit-input::placeholder {
+  color: #878a8c;
+}
+
+/* Sidebar widget */
+.reddit-widget {
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.reddit-widget-header {
+  padding: 10px 12px;
+  background: linear-gradient(to bottom, #46d160, #2d9941);
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* Award badge */
+.award-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 12px;
+  background: #fff3cd;
+  color: #b06000;
+  font-weight: 600;
+}
+
+/* Verified human badge */
+.human-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  padding: 1px 6px;
   border-radius: 10px;
+  background: rgba(70, 209, 96, 0.15);
+  color: #2d9941;
+  font-weight: 700;
+  border: 1px solid rgba(70, 209, 96, 0.3);
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+/* Reddit orange button */
+.btn-reddit-orange {
+  background: #ff4500;
+  color: white;
+  border: 1px solid #ff4500;
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+.btn-reddit-orange:hover {
+  background: #e03d00;
+  border-color: #e03d00;
+}
+
+/* Reddit blue button */
+.btn-reddit-blue {
+  background: #0079d3;
+  color: white;
+  border: 1px solid #0079d3;
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+.btn-reddit-blue:hover {
+  background: #006cbf;
+}
+
+/* Reddit outline button */
+.btn-reddit-outline {
+  background: transparent;
+  color: #0079d3;
+  border: 1px solid #0079d3;
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+.btn-reddit-outline:hover {
+  background: rgba(0, 121, 211, 0.1);
+}
+
+/* Reddit join button */
+.btn-join {
+  background: #ff4500;
+  color: white;
+  border-radius: 20px;
+  padding: 4px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  min-width: 72px;
+  text-align: center;
+  border: none;
+  transition: background-color 0.1s;
+}
+.btn-join:hover { background: #e03d00; }
+.btn-join.joined {
+  background: transparent;
+  color: #0079d3;
+  border: 1px solid #0079d3;
+}
+.btn-join.joined:hover {
+  background: rgba(0, 121, 211, 0.1);
+}
+
+/* Flair pill */
+.flair {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  margin: 0 2px;
+}
+
+/* Post link */
+a.post-title {
+  color: #222222;
+  text-decoration: none;
+  font-weight: 500;
+}
+a.post-title:hover {
+  text-decoration: underline;
+}
+
+/* Subreddit pill */
+.community-pill {
+  font-weight: 700;
+  color: #1c1c1c;
+  font-size: 12px;
+}
+.community-pill:hover {
+  text-decoration: underline;
+}
+
+/* Crosspost indicator */
+.crosspost-indicator {
+  background: #f6f7f8;
+  border: 1px dashed #edeff1;
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 12px;
+  color: #878a8c;
+}
+
+/* Collapsed comment */
+.comment-collapsed {
+  border-left: 2px solid #edeff1;
+  cursor: pointer;
+}
+.comment-collapsed:hover {
+  border-left-color: #0079d3;
+}
+
+/* Sort tab */
+.sort-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #878a8c;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+.sort-tab:hover {
+  background: #e2e2e2;
+  color: #1c1c1c;
+}
+.sort-tab.active {
+  color: #0079d3;
+  background: #e8f0fe;
 }

@@ -13,7 +13,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./client
     ports:
       - "3000:3000"
     environment:
@@ -21,7 +21,7 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ./server
     ports:
       - "5000:5000"
     environment:

@@ -2,7 +2,7 @@ import PostFeed from '../components/posts/PostFeed';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { RiImageLine, RiLinkM } from 'react-icons/ri';
-import { useAuthStore } from '../../store/authStore';
+import { useAuthStore } from '../store/authStore';
 import Card from '../components/ui/Card';
 
 export default function FeedPage() {

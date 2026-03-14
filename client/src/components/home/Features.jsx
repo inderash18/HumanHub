@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { useIntersection } from '../../hooks/useIntersection';
 import Card from '../ui/Card';
-import { RiShieldStarLine, RiChatThreadLine, RiStockLine, RiGroupLine, RiSwordLine, RiCodeBoxLine } from 'react-icons/ri';
+import { RiShieldStarLine, RiChat3Line, RiStockLine, RiGroupLine, RiSwordLine, RiCodeBoxLine } from 'react-icons/ri';
 import { FADE_UP_VARIANTS } from '../../utils/constants';
 
 export default function Features() {
@@ -9,7 +9,7 @@ export default function Features() {
 
     const features = [
        { icon: <RiGroupLine size={24}/>, title: 'Niche Sub-Hubs', desc: 'Create and moderate your own dedicated communities around hyper-specific interests.' },
-       { icon: <RiChatThreadLine size={24}/>, title: 'Nested Threads', desc: 'Robust multi-level comment architecture designed for deep, nuanced organic discussions.' },
+       { icon: <RiChat3Line size={24}/>, title: 'Nested Threads', desc: 'Robust multi-level comment architecture designed for deep, nuanced organic discussions.' },
        { icon: <RiStockLine size={24}/>, title: 'HotScore Physics', desc: 'A proprietary chronological voting algorithm that keeps front-page content fresh and fair.' },
        { icon: <RiShieldStarLine size={24}/>, title: 'Trust Systems', desc: 'Dynamic user standing calculations. Good actors gain privileges; bad actors are silent-banned.' },
        { icon: <RiSwordLine size={24}/>, title: 'Moderator Tooling', desc: 'Comprehensive dashboards for manual overrides, ban issuance, and detailed audit logs.' },

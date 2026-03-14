@@ -17,7 +17,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost/api
+      - VITE_API_URL=http://localhost/api
 
   backend:
     build:
@@ -26,7 +26,7 @@ services:
       - "5000:5000"
     environment:
       - PORT=5000
-      - MONGO_URI=mongodb://mongo:27017/humanhub
+      - MONGODB_URI=mongodb://mongo:27017/humanhub
       - PG_URI=postgresql://postgres:postgres@postgres:5432/humanhub
       - REDIS_URL=redis://redis:6379
       - AI_SERVICE_URL=http://ai_services:8000

@@ -39,15 +39,15 @@ export default function CommunityPage() {
         >
             <CommunityHeader community={community} />
             
-            <div className="grid md:grid-cols-4 gap-8 mt-8">
-                <div className="md:col-span-3 space-y-6">
+            <div className="flex flex-col lg:flex-row gap-6 mt-8">
+                <div className="flex-1 w-full lg:max-w-[640px] space-y-6">
                     <PostEditor communityId={community._id} />
                     <PostFeed communityId={community._id} />
                 </div>
                 
-                <div className="hidden md:block">
-                     {/* Dynamic Rules sidebar block essentially scaling cleanly visually structurally representing platform guidelines dynamically inherently natively smoothly */}
-                     <div className="sticky top-24 glass rounded-xl border border-white/5 p-5">
+                <div className="hidden lg:block w-[312px] shrink-0 space-y-4">
+                     {/* Dynamic Rules sidebar block */}
+                     <div className="sticky top-24 glass rounded-xl border border-white/5 p-5 bg-brand-surface">
                           <h4 className="font-playfair font-bold text-white text-lg border-b border-white/10 pb-3 mb-4">Community Rules</h4>
                           <ol className="text-brand-muted text-sm space-y-3 font-jakarta pl-4 list-decimal marker:text-brand-gold">
                                {community.rules?.length > 0 ? community.rules.map((r, i) => <li key={i}>{r}</li>) : (

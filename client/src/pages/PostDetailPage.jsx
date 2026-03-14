@@ -34,8 +34,8 @@ export default function PostDetailPage() {
     if (!post) return null;
 
     return (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-4xl mx-auto py-6">
-             <div className="glass rounded-xl border border-white/10 p-6 md:p-8 mb-6">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[800px] mx-auto py-6">
+             <div className="bg-brand-surface rounded-xl border border-white/5 p-4 md:p-6 mb-6 mt-4">
                 <PostCard post={post} isDetail={true} />
              </div>
 

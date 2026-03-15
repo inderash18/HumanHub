@@ -35,8 +35,7 @@ export const createCommunity = asyncHandler(async (req, res) => {
 // @access  Public
 export const getCommunities = asyncHandler(async (req, res) => {
   const communities = await Community.find()
-    .sort({ memberCount: -1 })
-    .limit(50);
+    .sort({ memberCount: -1 });
   res.json(communities);
 });
 

@@ -1,85 +1,117 @@
 import { useState } from 'react';
 import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css'; // Relies on external styles to be overridden in main css
+import 'react-quill/dist/quill.snow.css';
 import { createPost } from '../../services/postService';
 import { useAuthStore } from '../../store/authStore';
-import Button from '../ui/Button';
 import { toast } from 'react-hot-toast';
 
 export default function PostEditor({ communityId = null, onSuccess }) {
     const { isAuthenticated } = useAuthStore();
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
-    const [media, setMedia] = useState(null);
     const [loading, setLoading] = useState(false);
 
     if (!isAuthenticated) {
-        return <div className="p-4 bg-white/5 border border-white/10 rounded-xl text-center text-brand-muted text-sm">Sign in to publish human-verified ideas.</div>
+        return (
+            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
+                Join the human community to share your thoughts.
+            </div>
+        );
     }
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!title.trim() || !body.trim()) {
-            toast.error("A genuine human post requires both a title and some context.");
+        if (!title.trim() || body === '<p><br></p>' || !body.trim()) {
+            toast.error("Authentic human expressions require both a title and context.");
             return;
         }
 
         if (!communityId) {
-            toast.error("Please select a valid sub-hub to push this into.");
+            toast.error("Choose a community to verify your post within.");
             return;
         }
 
         setLoading(true);
         try {
-            // Simulated form data builder internally through postService wrapper realistically if media mapped
-            const payload = {
-                 title,
-                 body,
-                 communityId,
-                 mediaUrls: [] // Mocked without AWS S3 / Cloudinary strict multipart binds for initial run limits
-            };
-
+            const payload = { title, body, communityId, mediaUrls: [] };
             await createPost(payload);
-            toast.success("Post submitted to verification pipeline.");
+            toast.success("Identity verified. Post published.");
             setTitle('');
             setBody('');
             if(onSuccess) onSuccess();
         } catch (err) {
-            toast.error("Submission failed. Network limits reached potentially.");
+            toast.error("Verification failed. Please check your connection.");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <form onSubmit={handleSubmit} className="glass rounded-xl p-4 border border-white/10 flex flex-col gap-4">
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <input 
                 type="text" 
-                placeholder="Title" 
+                placeholder="Title your creation..." 
                 value={title}
                 onChange={e => setTitle(e.target.value)}
-                className="bg-transparent border-none text-xl font-playfair font-bold text-white focus:outline-none placeholder:opacity-40 px-2"
+                style={{
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: '1px solid var(--border-color)',
+                    fontSize: '22px',
+                    fontWeight: 800,
+                    color: 'white',
+                    padding: '8px 0',
+                    outline: 'none',
+                    fontFamily: 'Outfit, sans-serif'
+                }}
                 maxLength={300}
             />
-            {/* The React Quill editor */}
-            <div className="text-white/80 font-jakarta border border-white/5 rounded-lg overflow-hidden bg-brand-surface">
+
+            <div className="premium-editor">
                  <ReactQuill 
                      theme="snow" 
                      value={body} 
                      onChange={setBody} 
-                     placeholder="Share your thoughts. Bots will be blocked instantly..."
-                     className="min-h-[120px]"
+                     placeholder="Unleash your human creativity..."
+                     style={{ height: '240px', marginBottom: '44px' }}
                  />
+                 <style>{`
+                    .premium-editor .ql-container {
+                        border: none !important;
+                        font-family: inherit;
+                        font-size: 15px;
+                        color: rgba(255,255,255,0.9);
+                    }
+                    .premium-editor .ql-toolbar {
+                        background: var(--surface-elevated) !important;
+                        border: 1px solid var(--border-color) !important;
+                        border-radius: 8px !important;
+                        margin-bottom: 12px;
+                    }
+                    .premium-editor .ql-editor.ql-blank::before {
+                        color: var(--text-muted) !important;
+                        font-family: 'Outfit';
+                        font-style: normal;
+                    }
+                    .premium-editor .ql-stroke { stroke: var(--text-secondary) !important; }
+                    .premium-editor .ql-fill { fill: var(--text-secondary) !important; }
+                    .premium-editor .ql-picker { color: var(--text-secondary) !important; }
+                 `}</style>
             </div>
 
-            <div className="flex justify-between items-center px-2 pt-2 border-t border-white/5">
-                <div className="text-xs text-brand-muted font-mono flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-gold animate-pulse"></span>
-                    Protected by Detection API
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--brand-color)', animation: 'pulse 1.5s infinite' }} />
+                    HUMAN-SCAN ACTIVE
                 </div>
-                <Button type="submit" size="sm" disabled={loading}>
-                    {loading ? 'Verifying...' : 'Post'}
-                </Button>
+                <button 
+                    type="submit" 
+                    disabled={loading} 
+                    className="btn-dhruvit"
+                    style={{ padding: '10px 32px', fontSize: '14px', borderRadius: '30px' }}
+                >
+                    {loading ? 'VERIFYING...' : 'PUBLISH'}
+                </button>
             </div>
         </form>
     );

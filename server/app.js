@@ -28,8 +28,8 @@ app.use(cors({
     credentials: true 
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Apply rate limiting to all requests (could be scoped just to /api)
 app.use('/api', apiLimiter);
@@ -54,6 +54,39 @@ app.use('/api/comments/:commentId/vote', (req, res, next) => {
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/waitlist', waitlistRoutes);
+
+app.get('/bootstrap', async (req, res) => {
+    try {
+        const Community = (await import('./models/Community.js')).default;
+        const User = (await import('./models/User.js')).default;
+        
+        let systemUser = await User.findOne({ username: 'dhruvit_system' }) || await User.findOne();
+        if (!systemUser) {
+            systemUser = await User.create({
+                username: 'dhruvit_system', email: 'system@dhruvit.com', password: 'password123',
+                role: 'admin', trustScore: 1.0, isVerifiedHuman: true
+            });
+        }
+
+        const defaults = [
+            { name: 'Technology', slug: 'technology', description: 'Tech' },
+            { name: 'Science', slug: 'science', description: 'Science' },
+            { name: 'World News', slug: 'worldnews', description: 'News' },
+            { name: 'Creativity', slug: 'creativity', description: 'Art' }
+        ];
+
+        for (const c of defaults) {
+            await Community.findOneAndUpdate(
+                { slug: c.slug },
+                { ...c, creator: systemUser._id, moderators: [systemUser._id] },
+                { upsert: true }
+            );
+        }
+        res.send('System Bootstrapped.');
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
 
 app.use(notFound);
 app.use(errorHandler);

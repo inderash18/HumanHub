@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { register } from '../services/authService';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { motion } from 'framer-motion';
 
 export default function RegisterPage() {
     const navigate = useNavigate();
@@ -27,91 +28,118 @@ export default function RegisterPage() {
             minHeight: '100vh', background: 'var(--bg-color)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
         }}>
-            <div style={{ display: 'flex', width: '100%', maxWidth: '860px', background: 'var(--surface-color)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+            <motion.div 
+                initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+                style={{ 
+                    display: 'flex', width: '100%', maxWidth: '920px', 
+                    background: 'var(--surface-color)', borderRadius: '24px', 
+                    overflow: 'hidden', border: '1px solid var(--border-color)',
+                    boxShadow: '0 32px 64px -16px rgba(0,0,0,0.6)'
+                }}
+            >
                 {/* Left panel */}
-                <div style={{
-                    width: '320px', flexShrink: 0,
-                    background: 'linear-gradient(135deg, var(--brand-color) 0%, #cc3700 100%)',
-                    padding: '40px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
-                }}>
-                    <div>
-                         <div style={{ marginBottom: '32px' }}>
-                             <svg viewBox="0 0 100 100" width="50" height="50">
+                <div 
+                    className="auth-panel-left"
+                    style={{
+                        width: '380px', flexShrink: 0,
+                        background: 'linear-gradient(135deg, var(--brand-color) 0%, #a22c00 100%)',
+                        padding: '60px 48px', display: 'flex', flexDirection: 'column', 
+                        justifyContent: 'space-between', position: 'relative'
+                    }}
+                >
+                    <div style={{ position: 'relative', zIndex: 1 }}>
+                         <div style={{ marginBottom: '40px' }}>
+                             <svg viewBox="0 0 100 100" width="64" height="64" style={{ filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.2))' }}>
                                 <circle cx="50" cy="50" r="48" fill="white" />
-                                <path d="M50 20 L50 80 M20 50 L80 50" stroke="var(--brand-color)" strokeWidth="8" />
+                                <path d="M50 20 L50 80 M20 50 L80 50" stroke="var(--brand-color)" strokeWidth="10" strokeLinecap="round" />
                              </svg>
                          </div>
-                        <h1 style={{ color: 'white', fontSize: '28px', fontWeight: 800, lineHeight: 1.2, marginBottom: '20px' }}>
-                            Join the Revolution.
+                        <h1 style={{ color: 'white', fontSize: '36px', fontWeight: 800, lineHeight: 1.1, marginBottom: '24px', letterSpacing: '-1.5px', fontFamily: 'Outfit, sans-serif' }}>
+                            Start Your <br/>Human Journey.
                         </h1>
-                        <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '15px', lineHeight: 1.6 }}>
-                            Become a certified human creator on DHRUVIT. Share your voice in an AI-free ecosystem.
+                        <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '16px', lineHeight: 1.6, fontWeight: 500 }}>
+                            Join 1M+ humans sharing authentic thoughts in an AI-free ecosystem.
                         </p>
                     </div>
-                    <div style={{ color: 'white', fontSize: '13px', fontWeight: 600 }}>
-                         🛡️ AI-Safe Protection Enabled
+                    <div style={{ position: 'relative', zIndex: 1, color: 'white', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                         <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00ff7f', boxShadow: '0 0 12px #00ff7f' }}></div>
+                         <span>SECURED BY DHRUVIT-AI™</span>
                     </div>
                 </div>
 
                 {/* Right panel */}
-                <div style={{ flex: 1, padding: '40px 48px' }}>
-                    <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'white', marginBottom: '8px' }}>
-                        Sign Up
-                    </h2>
-                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '24px' }}>
-                        By continuing, you agree to our{' '}
-                        <Link to="/" style={{ color: 'var(--brand-color)', textDecoration: 'none' }}>Agreement</Link>.
-                    </p>
-
-                    <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <input
-                            required
-                            type="text"
-                            placeholder="HUMAN USERNAME"
-                            value={formData.username}
-                            onChange={e => setFormData({ ...formData, username: e.target.value })}
-                            className="reddit-input"
-                        />
-                        <input
-                            required
-                            type="email"
-                            placeholder="EMAIL ADDRESS"
-                            value={formData.email}
-                            onChange={e => setFormData({ ...formData, email: e.target.value })}
-                            className="reddit-input"
-                        />
-                        <input
-                            required
-                            type="password"
-                            placeholder="SECURE PASSWORD"
-                            value={formData.password}
-                            onChange={e => setFormData({ ...formData, password: e.target.value })}
-                            className="reddit-input"
-                        />
-
-                        <p style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '8px 0' }}>
-                           DHRUVIT uses real-time verification to ensure authentic human interaction. Your data is encrypted and protected.
+                <div style={{ flex: 1, padding: '60px 56px', background: 'var(--surface-color)' }}>
+                    <div style={{ marginBottom: '40px' }}>
+                        <h2 style={{ fontSize: '24px', fontWeight: 800, color: 'white', marginBottom: '8px', letterSpacing: '-0.5px' }}>
+                            Create Account
+                        </h2>
+                        <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                            Already a member?{' '}
+                            <Link to="/login" style={{ color: 'var(--brand-color)', textDecoration: 'none', fontWeight: 700 }}>Log In</Link>
                         </p>
+                    </div>
 
-                        <button type="submit" disabled={loading} className="btn-dhruvit" style={{ width: '100%', padding: '12px' }}>
-                            {loading ? 'CREATING IDENTITY...' : 'CONTINUE'}
-                        </button>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '8px 0' }}>
-                            <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
-                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 700 }}>OR</span>
-                            <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+                    <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Username</label>
+                            <input
+                                required
+                                type="text"
+                                placeholder="@HUMAN_CREATOR"
+                                value={formData.username}
+                                onChange={e => setFormData({ ...formData, username: e.target.value })}
+                                className="reddit-input"
+                            />
                         </div>
 
-                        <div style={{ textAlign: 'center', fontSize: '14px', color: 'var(--text-secondary)' }}>
-                            Already human?{' '}
-                            <Link to="/login" style={{ color: 'var(--brand-color)', fontWeight: 800, textDecoration: 'none' }}>
-                                Log In
-                            </Link>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Email Address</label>
+                            <input
+                                required
+                                type="email"
+                                placeholder="YOU@EXAMPLE.COM"
+                                value={formData.email}
+                                onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                className="reddit-input"
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Secret Password</label>
+                            <input
+                                required
+                                type="password"
+                                placeholder="••••••••••••"
+                                value={formData.password}
+                                onChange={e => setFormData({ ...formData, password: e.target.value })}
+                                className="reddit-input"
+                            />
+                        </div>
+
+                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5, margin: '8px 0' }}>
+                           DHRUVIT uses real-time biological verification cues to ensure authentic human interaction. Your data is encrypted and protected.
+                        </p>
+
+                        <button 
+                            type="submit" 
+                            disabled={loading} 
+                            className="btn-dhruvit" 
+                            style={{ 
+                                width: '100%', padding: '14px', fontSize: '15px', letterSpacing: '0.3px',
+                                boxShadow: '0 12px 24px -10px rgba(255, 69, 0, 0.4)'
+                            }}
+                        >
+                            {loading ? 'INITIATING...' : 'CREATE IDENTITY'}
+                        </button>
+
+                        <div style={{ textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                            By joining, you agree to our <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Agreement</span>.
                         </div>
                     </form>
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 }

@@ -8,22 +8,25 @@ export default function Layout() {
     const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
 
     return (
-        <div style={{ minHeight: '100vh', background: '#dae0e6', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ minHeight: '100vh', background: 'var(--bg-color)', display: 'flex', flexDirection: 'column' }}>
             <Navbar />
 
             {isAuthPage ? (
-                <main style={{ paddingTop: '48px', flex: 1 }}>
+                <main style={{ paddingTop: 'var(--nav-height)', flex: 1, background: 'var(--bg-color)' }}>
                     <Outlet />
                 </main>
             ) : isMarketingPage ? (
-                <main style={{ flex: 1 }}>
+                <main style={{ flex: 1, background: 'var(--bg-color)' }}>
                     <Outlet />
                 </main>
             ) : (
-                <div style={{ paddingTop: '48px', flex: 1, display: 'flex', justifyContent: 'center' }}>
-                    <div style={{ display: 'flex', width: '100%', maxWidth: '1200px', padding: '20px 24px', gap: '24px' }}>
-                        {/* Left sidebar */}
-                        <Sidebar />
+                <div style={{ paddingTop: 'var(--nav-height)', flex: 1, display: 'flex', justifyContent: 'center' }}>
+                    <div style={{ display: 'flex', width: '100%', maxWidth: '1280px', padding: '24px', gap: '24px' }}>
+                        {/* Sticky Left sidebar */}
+                        <div style={{ position: 'sticky', top: 'calc(var(--nav-height) + 24px)', height: 'fit-content' }}>
+                           <Sidebar />
+                        </div>
+                        
                         {/* Main content */}
                         <main style={{ flex: 1, minWidth: 0 }}>
                             <Outlet />

@@ -18,6 +18,7 @@ services:
       - "3000:3000"
     environment:
       - VITE_API_URL=http://localhost/api
+      - VITE_SOCKET_URL=http://localhost
 
   backend:
     build:
@@ -29,6 +30,7 @@ services:
       - MONGODB_URI=mongodb+srv://inderash18_db_user:mongodb10@cluster0.zrs1ebj.mongodb.net/humanhub?retryWrites=true&w=majority
       - PG_URI=postgresql://postgres:postgres@postgres:5432/humanhub
       - REDIS_URL=redis://redis:6379
+      - FRONTEND_URL=http://localhost
       - AI_SERVICE_URL=http://ai_services:8000
     depends_on:
       - mongo

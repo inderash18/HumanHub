@@ -2,135 +2,95 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 
 const popularCommunities = [
-  { slug: 'technology', name: 'r/technology', icon: '💻', color: '#ff4500' },
-  { slug: 'science', name: 'r/science', icon: '🔬', color: '#46d160' },
-  { slug: 'worldnews', name: 'r/worldnews', icon: '🌍', color: '#0079d3' },
-  { slug: 'art', name: 'r/HumanArt', icon: '🎨', color: '#ff585b' },
-  { slug: 'gaming', name: 'r/gaming', icon: '🎮', color: '#7193ff' },
+  { slug: 'technology', name: 'd/technology', icon: '💻', color: '#ff4500' },
+  { slug: 'science', name: 'd/science', icon: '🔬', color: '#46d160' },
+  { slug: 'worldnews', name: 'd/worldnews', icon: '🌍', color: '#0079d3' },
+  { slug: 'creativity', name: 'd/creativity', icon: '🎨', color: '#ff585b' },
+  { slug: 'gaming', name: 'd/gaming', icon: '🎮', color: '#7193ff' },
 ];
 
 export default function Sidebar() {
     const { isAuthenticated, user } = useAuthStore();
     const location = useLocation();
 
-    const navItems = [
-        { to: '/feed', icon: '🏠', label: 'Home' },
-        { to: '/communities', icon: '🧭', label: 'Explore' },
-    ];
-
     return (
-        <aside style={{ width: '270px', flexShrink: 0, display: 'none' }} className="lg-sidebar">
+        <aside style={{ width: '240px', flexShrink: 0, paddingRight: '12px', overflowY: 'auto', height: 'calc(100vh - var(--nav-height))', display: 'none' }} className="lg-sidebar no-scrollbar">
             <style>{`
-                @media (min-width: 960px) { .lg-sidebar { display: block !important; } }
+                @media (min-width: 960px) { .lg-sidebar { display: flex !important; flex-direction: column; gap: 4px; } }
+                .no-scrollbar::-webkit-scrollbar { display: none; }
             `}</style>
 
-            {/* Main nav */}
-            <div style={{ background: '#fff', border: '1px solid #ccc', borderRadius: '4px', marginBottom: '16px', padding: '8px 0' }}>
-                {navItems.map(item => (
-                    <Link key={item.to} to={item.to} style={{
-                        display: 'flex', alignItems: 'center', gap: '10px',
-                        padding: '8px 16px', textDecoration: 'none',
-                        color: location.pathname === item.to ? '#0079d3' : '#1c1c1c',
-                        fontWeight: location.pathname === item.to ? 700 : 400,
-                        fontSize: '14px',
-                        background: location.pathname === item.to ? '#e8f0fe' : 'transparent',
-                        transition: 'background 0.1s',
-                    }}
-                    onMouseEnter={e => location.pathname !== item.to && (e.currentTarget.style.background = '#f6f7f8')}
-                    onMouseLeave={e => location.pathname !== item.to && (e.currentTarget.style.background = 'transparent')}
-                    >
-                        <span style={{ fontSize: '18px' }}>{item.icon}</span>
-                        {item.label}
-                    </Link>
-                ))}
-
-                {isAuthenticated && (
-                    <>
-                        <div style={{ borderTop: '1px solid #edeff1', margin: '8px 0' }} />
-                        <div style={{ padding: '4px 16px 8px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#878a8c', letterSpacing: '0.5px' }}>
-                            My Communities
-                        </div>
-                        {popularCommunities.slice(0, 3).map(c => (
-                            <Link key={c.slug} to={`/c/${c.slug}`} style={{
-                                display: 'flex', alignItems: 'center', gap: '10px',
-                                padding: '8px 16px', textDecoration: 'none', color: '#1c1c1c', fontSize: '14px'
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#f6f7f8'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                            >
-                                <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: c.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', flexShrink: 0 }}>
-                                    {c.icon}
-                                </div>
-                                <span style={{ fontWeight: 500 }}>{c.name}</span>
-                            </Link>
-                        ))}
-                    </>
-                )}
+            {/* Main Links */}
+            <div style={{ marginBottom: '12px' }}>
+                <Link to="/feed" className={`sidebar-link ${location.pathname === '/feed' ? 'active' : ''}`}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="22" height="22">
+                        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                    </svg>
+                    <span>Home</span>
+                </Link>
+                <Link to="/popular" className={`sidebar-link ${location.pathname === '/popular' ? 'active' : ''}`}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="22" height="22">
+                        <path d="M12 2v20M2 12h20M5 5l14 14M19 5 5 19"/>
+                    </svg>
+                    <span>Popular</span>
+                </Link>
+                <Link to="/explore" className={`sidebar-link ${location.pathname === '/explore' ? 'active' : ''}`}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="22" height="22">
+                        <circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"/>
+                    </svg>
+                    <span>Explore</span>
+                </Link>
             </div>
 
-            {/* Human Verification Status */}
+            <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '8px 4px' }} />
+
+            {/* Communities Section */}
+            <div>
+                 <div style={{ padding: '8px 12px', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>
+                    Recent Communities
+                </div>
+                {popularCommunities.map((c) => (
+                    <Link key={c.slug} to={`/c/${c.slug}`} className="sidebar-link">
+                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: c.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', flexShrink: 0 }}>
+                            {c.icon}
+                        </div>
+                        <span style={{ fontSize: '13px' }}>{c.name}</span>
+                    </Link>
+                ))}
+            </div>
+
+            <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '8px 4px' }} />
+
+            {/* Resources Section */}
+            <div>
+                 <div style={{ padding: '8px 12px', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>
+                    Resources
+                </div>
+                <Link to="/about" className="sidebar-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+                    <span>About DHRUVIT</span>
+                </Link>
+                <Link to="/advertise" className="sidebar-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                    <span>Advertise</span>
+                </Link>
+                <Link to="/help" className="sidebar-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                    <span>Help Center</span>
+                </Link>
+            </div>
+
+            {/* User Badges Card at the very bottom */}
             {isAuthenticated && (
-                <div style={{ background: '#fff', border: '1px solid #ccc', borderRadius: '4px', marginBottom: '16px', overflow: 'hidden' }}>
-                    <div style={{ background: 'linear-gradient(to bottom, #46d160, #2d9941)', padding: '12px 16px' }}>
-                        <div style={{ color: 'white', fontWeight: 700, fontSize: '14px', marginBottom: '2px' }}>
-                            ✅ Human Verified
-                        </div>
-                        <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '12px' }}>
-                            Trust Score: <strong>{Math.round((user?.trustScore || 0.95) * 100)}%</strong>
-                        </div>
-                    </div>
-                    <div style={{ padding: '12px 16px' }}>
-                        <div style={{ fontSize: '12px', color: '#1c1c1c', marginBottom: '10px', lineHeight: '1.5' }}>
-                            Your account has been verified as human. You have full access to all communities.
-                        </div>
-                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                            <span style={{ background: 'rgba(70,209,96,0.15)', color: '#2d9941', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(70,209,96,0.3)' }}>
-                                🏆 Human
-                            </span>
-                            <span style={{ background: '#fff3cd', color: '#b06000', fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px' }}>
-                                ⭐ Trusted
-                            </span>
+                 <div style={{ marginTop: 'auto', padding: '12px' }}>
+                    <div className="reddit-card" style={{ background: 'linear-gradient(45deg, #121212, #202020)', border: '1px solid var(--brand-color)', padding: '12px' }}>
+                        <div style={{ fontWeight: 800, color: 'var(--brand-color)', fontSize: '12px', marginBottom: '4px' }}>HUMAN CERTIFIED</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                            {user?.username}, you are currently verified as a human content creator.
                         </div>
                     </div>
                 </div>
             )}
-
-            {/* Popular Communities */}
-            <div style={{ background: '#fff', border: '1px solid #ccc', borderRadius: '4px', marginBottom: '16px', overflow: 'hidden' }}>
-                <div style={{ padding: '10px 12px', background: 'linear-gradient(to bottom, #ff6534, #ff4500)', color: 'white', fontWeight: 700, fontSize: '14px' }}>
-                    Top Communities
-                </div>
-                <div style={{ padding: '8px 0' }}>
-                    {popularCommunities.map((c, i) => (
-                        <div key={c.slug} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px' }}>
-                            <span style={{ color: '#878a8c', fontSize: '12px', minWidth: '16px', fontWeight: 700 }}>{i + 1}</span>
-                            <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: c.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>
-                                {c.icon}
-                            </div>
-                            <Link to={`/c/${c.slug}`} style={{ flex: 1, textDecoration: 'none', color: '#1c1c1c', fontWeight: 700, fontSize: '13px' }}>
-                                {c.name}
-                            </Link>
-                            <button className="btn-join" style={{ fontFamily: 'inherit' }}>Join</button>
-                        </div>
-                    ))}
-                    <div style={{ padding: '8px 12px' }}>
-                        <Link to="/communities" className="btn-reddit-blue" style={{ display: 'block', textAlign: 'center', textDecoration: 'none', fontFamily: 'inherit' }}>
-                            View All
-                        </Link>
-                    </div>
-                </div>
-            </div>
-
-            {/* Footer links */}
-            <div style={{ fontSize: '11px', color: '#878a8c', padding: '0 4px', lineHeight: '2', display: 'flex', flexWrap: 'wrap', gap: '4px 8px' }}>
-                {['User Agreement', 'Privacy Policy', 'Content Policy', 'Moderator Code', 'Careers', 'Press'].map(l => (
-                    <Link key={l} to="/" style={{ color: '#878a8c', textDecoration: 'none' }}
-                    onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
-                    onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
-                    >{l}</Link>
-                ))}
-                <span>HumanHub Inc © 2026. All rights reserved.</span>
-            </div>
         </aside>
     );
 }

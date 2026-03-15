@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Button from '../ui/Button';
 import { banUserAction } from '../../services/moderationService';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 
 export default function BanPanel({ targetUserId, onBanComplete }) {
     const [loading, setLoading] = useState(false);

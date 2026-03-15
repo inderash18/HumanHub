@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import * as authService from '../services/authService';
 import api from '../services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 
 export const useAuth = () => {
   const [loading, setLoading] = useState(false);

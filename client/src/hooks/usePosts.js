@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { fetchPosts } from '../services/postService.js';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 
 export const usePosts = (community = null) => {
     const [posts, setPosts] = useState([]);

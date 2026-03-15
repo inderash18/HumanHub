@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 
 export const useSocket = () => {
     const { user, isAuthenticated } = useAuthStore();

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { getModerationQueue, approveItemAction, rejectItemAction } from '../../services/moderationService';
 import ScoreBreakdown from './ScoreBreakdown';
 import Button from '../ui/Button';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 
 export default function ModerationQueue() {
     const [queue, setQueue] = useState([]);

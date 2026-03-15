@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import api from '../../services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 
 export default function WaitlistModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false);

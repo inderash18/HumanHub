@@ -4,7 +4,7 @@ import 'react-quill/dist/quill.snow.css'; // Relies on external styles to be ove
 import { createPost } from '../../services/postService';
 import { useAuthStore } from '../../store/authStore';
 import Button from '../ui/Button';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 
 export default function PostEditor({ communityId = null, onSuccess }) {
     const { isAuthenticated } = useAuthStore();

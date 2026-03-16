@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+pydantic
+httpx
+python-magic
+pillow
+exifread
+numpy
+opencv-python-headless
+torch
+transformers
+librosa
+scipy
+motor
+redis
+python-multipart
+hashlib

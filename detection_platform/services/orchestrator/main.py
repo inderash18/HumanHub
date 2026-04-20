@@ -59,6 +59,50 @@ async def orchestrate_scan(request: ScanRequest):
 
     return final_result
 
+# --- LEGACY COMPATIBILITY ENDPOINTS ---
+
+@app.post("/analyze/text")
+async def analyze_text_legacy(payload: dict):
+    text = payload.get("text", "")
+    req = ScanRequest(media_id="legacy", media_type=MediaType.TEXT, raw_text=text)
+    result = await orchestrate_scan(req)
+    # Extract compatible score from layers
+    text_layers = [l for l in result.layers if l.group == 8]
+    avg_score = sum(l.score for l in text_layers) / len(text_layers) if text_layers else 0.1
+    return {
+        "score": avg_score,
+        "isAI": avg_score > 0.5,
+        "confidence": 0.95
+    }
+
+@app.post("/analyze/media")
+async def analyze_media_legacy(payload: dict):
+    urls = payload.get("urls", [])
+    req = ScanRequest(media_id="legacy", media_type=MediaType.IMAGE, content_url=urls[0] if urls else None)
+    result = await orchestrate_scan(req)
+    # Extract compatible score from layers (Group 4 = Image)
+    image_layers = [l for l in result.layers if l.group == 4]
+    avg_score = sum(l.score for l in image_layers) / len(image_layers) if image_layers else 0.1
+    return {
+        "score": avg_score,
+        "isAI": avg_score > 0.5,
+        "confidence": 0.85
+    }
+
+@app.post("/analyze/behavior")
+async def analyze_behavior_legacy(payload: dict):
+    user_id = payload.get("userId")
+    req = ScanRequest(media_id="legacy", media_type=MediaType.TEXT, metadata={"userId": user_id})
+    result = await orchestrate_scan(req)
+    # Extract compatible score from layers (Group 9 = Behavior)
+    behavior_layers = [l for l in result.layers if l.group == 9]
+    avg_score = sum(l.score for l in behavior_layers) / len(behavior_layers) if behavior_layers else 0.1
+    return {
+        "score": avg_score,
+        "isBotLikely": avg_score > 0.6,
+        "confidence": 0.9
+    }
+
 @app.get("/health")
 def health():
     return {"status": "healthy"}

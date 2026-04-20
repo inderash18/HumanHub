@@ -10,7 +10,7 @@ export const handleVote = asyncHandler(async (req, res) => {
   // Actually maps to POST /api/posts/:id/vote OR /api/comments/:id/vote based on the router
   
   const { id } = req.params;
-  const { value } = req.body; // 1 or -1, or 0 to clear
+  const value = req.body.value ?? req.body.direction; // Handle both schemas
   const type = req.baseUrl.includes('post') ? 'post' : 'comment';
   const Model = type === 'post' ? Post : Comment;
 

@@ -9,8 +9,10 @@ import CommunityPage from "./pages/CommunityPage"
 import PostDetailPage from "./pages/PostDetailPage"
 import SubmitPostPage from "./pages/SubmitPostPage"
 import UserProfilePage from "./pages/UserProfilePage"
+import SettingsPage from "./pages/SettingsPage"
 import ModeratorDashboard from "./pages/ModeratorDashboard"
 import { useSocket } from "./hooks/useSocket"
+
 
 export default function App() {
   // Initialize global singleton socket mapping auth listeners continuously securely cleanly intrinsically inherently dynamically beautifully.
@@ -31,7 +33,9 @@ export default function App() {
             <Route path="/u/:username" element={<UserProfilePage />} />
             
             <Route path="/submit" element={<SubmitPostPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="/mod-dashboard" element={<ModeratorDashboard />} />
+
             
             <Route path="/communities" element={<div className="p-12 text-center text-brand-muted text-xl animate-pulse">Community directory mapped in architecture, pending build...</div>} />
         </Route>

@@ -7,11 +7,12 @@ pillow
 exifread
 numpy
 opencv-python-headless
-torch
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch --index-url https://download.pytorch.org/whl/cpu
 transformers
 librosa
 scipy
 motor
 redis
 python-multipart
-hashlib
+# hashlib is part of stdlib, no need to list it

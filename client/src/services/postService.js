@@ -23,3 +23,7 @@ export const createPost = async (postData) => {
 export const reportPost = async (id, payload) => {
    return api.post(`/posts/${id}/report`, payload);
 };
+
+export const votePost = async (id, dir) => {
+   return api.post(`/posts/${id}/vote`, { direction: dir });
+};

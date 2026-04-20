@@ -1,19 +1,30 @@
 import { useState } from 'react';
+import { votePost } from '../../services/postService';
+import toast from 'react-hot-toast';
 
 export default function VoteButton({ initialScore = 0, targetId, targetType, horizontal = false }) {
     const [score, setScore] = useState(initialScore);
     const [voted, setVoted] = useState(null); // 'up' | 'down' | null
+    const [loading, setLoading] = useState(false);
 
-    const handleVote = (dir) => {
-        if (voted === dir) {
-            setVoted(null);
-            setScore(initialScore);
-        } else if (voted && voted !== dir) {
-            setVoted(dir);
-            setScore(dir === 'up' ? initialScore + 1 : initialScore - 1);
-        } else {
-            setVoted(dir);
-            setScore(dir === 'up' ? initialScore + 1 : initialScore - 1);
+    const handleVote = async (dir) => {
+        if (loading) return;
+        setLoading(true);
+        try {
+            await votePost(targetId, dir);
+            // Toggle or change vote
+            if (voted === dir) {
+                setVoted(null);
+                setScore(voted === 'up' ? score - 1 : score + 1);
+            } else {
+                const diff = voted ? (dir === 'up' ? 2 : -2) : (dir === 'up' ? 1 : -1);
+                setVoted(dir);
+                setScore(score + diff);
+            }
+        } catch (err) {
+            toast.error("Cloud connection required for persistent voting.");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -22,33 +33,25 @@ export default function VoteButton({ initialScore = 0, targetId, targetType, hor
         return n;
     };
 
-    const scoreColor = voted === 'up' ? 'var(--brand-color)' : voted === 'down' ? '#7193ff' : 'var(--text-primary)';
-
-    if (horizontal) {
-        return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <button onClick={() => handleVote('up')} className={`vote-btn ${voted === 'up' ? 'upvoted' : ''}`} title="Upvote">
-                    <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M10 3l7 7H3l7-7z"/></svg>
-                </button>
-                <span style={{ fontSize: '13px', fontWeight: 800, color: scoreColor, minWidth: '24px', textAlign: 'center' }}>
-                    {formatScore(score)}
-                </span>
-                <button onClick={() => handleVote('down')} className={`vote-btn ${voted === 'down' ? 'downvoted' : ''}`} title="Downvote">
-                    <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M10 17l-7-7h14l-7 7z"/></svg>
-                </button>
-            </div>
-        );
-    }
+    const scoreColor = voted === 'up' ? 'text-reddit-orange' : voted === 'down' ? 'text-reddit-downvote' : 'text-white';
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-            <button onClick={() => handleVote('up')} className={`vote-btn ${voted === 'up' ? 'upvoted' : ''}`} title="Upvote">
+        <div className={`flex ${horizontal ? 'items-center gap-3 px-2' : 'flex-col items-center gap-1'}`}>
+            <button 
+                onClick={(e) => { e.preventDefault(); handleVote('up'); }} 
+                className={`p-1 rounded-md transition-colors ${voted === 'up' ? 'text-reddit-orange bg-reddit-orange/10' : 'text-zinc-500 hover:text-reddit-orange hover:bg-reddit-orange/10'}`}
+                disabled={loading}
+            >
                 <svg viewBox="0 0 20 20" fill="currentColor" width="22" height="22"><path d="M10 3l7 7H3l7-7z"/></svg>
             </button>
-            <span style={{ fontSize: '13px', fontWeight: 800, color: scoreColor, lineHeight: 1 }}>
+            <span className={`text-xs font-black min-w-[20px] text-center ${scoreColor}`}>
                 {formatScore(score)}
             </span>
-            <button onClick={() => handleVote('down')} className={`vote-btn ${voted === 'down' ? 'downvoted' : ''}`} title="Downvote">
+            <button 
+                onClick={(e) => { e.preventDefault(); handleVote('down'); }} 
+                className={`p-1 rounded-md transition-colors ${voted === 'down' ? 'text-reddit-downvote bg-reddit-downvote/10' : 'text-zinc-500 hover:text-reddit-downvote hover:bg-reddit-downvote/10'}`}
+                disabled={loading}
+            >
                 <svg viewBox="0 0 20 20" fill="currentColor" width="22" height="22"><path d="M10 17l-7-7h14l-7 7z"/></svg>
             </button>
         </div>

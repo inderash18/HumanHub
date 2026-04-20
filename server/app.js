@@ -13,7 +13,17 @@ import moderationRoutes from './routes/moderation.js';
 import userRoutes from './routes/users.js';
 import waitlistRoutes from './routes/waitlist.js';
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
+
+// Serve static uploads
+app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 // Trust the first proxy (nginx) for correct IP and X-Forwarded headers
 app.set('trust proxy', 1);
@@ -34,22 +44,25 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Apply rate limiting to all requests (could be scoped just to /api)
 app.use('/api', apiLimiter);
 
-app.use('/api/auth', authRoutes);
-app.use('/api/posts', postRoutes);
-app.use('/api/comments', commentRoutes);
-app.use('/api/communities', communityRoutes);
-
-// Fix: Merge params setup by mapping directly to dynamic root params
+// Fix: Vote routes must be defined BEFORE the general /api/posts route to avoid shadowing
 app.use('/api/posts/:postId/vote', (req, res, next) => {
     req.params.id = req.params.postId;
-    req.baseUrl = '/api/posts'; // Override for vote controller logic
+    req.baseUrl = '/api/posts'; 
     next();
 }, voteRoutes);
+
 app.use('/api/comments/:commentId/vote', (req, res, next) => {
     req.params.id = req.params.commentId;
     req.baseUrl = '/api/comments';
     next();
 }, voteRoutes);
+
+// General routes
+app.use('/api/auth', authRoutes);
+app.use('/api/posts', postRoutes);
+app.use('/api/comments', commentRoutes);
+app.use('/api/communities', communityRoutes);
+app.use('/api/posts/upload', (await import('./routes/upload.js')).default);
 
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/users', userRoutes);

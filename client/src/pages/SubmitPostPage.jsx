@@ -1,149 +1,221 @@
 import { useState, useEffect } from 'react';
-import PostEditor from '../components/posts/PostEditor';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FaFileAlt, FaImage, FaLink, FaPoll, FaRegEdit } from 'react-icons/fa';
+
+import toast from 'react-hot-toast';
+
+import api from '../services/api';
 import { fetchCommunities } from '../services/communityService';
-import { motion } from 'framer-motion';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
+import MediaUpload from '../components/media/MediaUpload';
 
 const TABS = [
-    { key: 'text', icon: '📝', label: 'Post' },
-    { key: 'image', icon: '🖼️', label: 'Images' },
-    { key: 'link', icon: '🔗', label: 'Link' },
+    { key: 'text', icon: <FaFileAlt />, label: 'Post' },
+    { key: 'image', icon: <FaImage />, label: 'Images & Video' },
+    { key: 'link', icon: <FaLink />, label: 'Link' },
+    { key: 'poll', icon: <FaPoll />, label: 'Poll' , disabled: true },
 ];
 
 export default function SubmitPostPage() {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('text');
+    const [loading, setLoading] = useState(false);
+    
+    // Core State
     const [communities, setCommunities] = useState([]);
     const [selectedCommunity, setSelectedCommunity] = useState('');
-
-    const [loadingCommunities, setLoadingCommunities] = useState(true);
+    const [title, setTitle] = useState('');
+    const [body, setBody] = useState('');
+    const [mediaFiles, setMediaFiles] = useState([]); // Array of { id, preview, file }
 
     useEffect(() => {
-        const loadCommunities = async () => {
+        const load = async () => {
             try {
                 const data = await fetchCommunities();
-                if (data && data.length > 0) {
+                if (data?.length > 0) {
                     setCommunities(data);
                     setSelectedCommunity(data[0]._id);
-                } else {
-                    const defaults = [
-                        { _id: '65f4268e0f1a2c001f000001', name: 'Technology', slug: 'technology' },
-                        { _id: '65f4268e0f1a2c001f000002', name: 'Science', slug: 'science' },
-                        { _id: '65f4268e0f1a2c001f000003', name: 'Creativity', slug: 'creativity' }
-                    ];
-                    setCommunities(defaults);
-                    setSelectedCommunity(defaults[0]._id);
                 }
             } catch (err) {
-                const defaults = [
-                    { _id: '65f4268e0f1a2c001f000001', name: 'Technology', slug: 'technology' }
-                ];
-                setCommunities(defaults);
-                setSelectedCommunity(defaults[0]._id);
-            } finally {
-                setLoadingCommunities(false);
+                console.error(err);
             }
         };
-        loadCommunities();
+        load();
     }, []);
 
+    const handlePublish = async () => {
+        if (!selectedCommunity) return toast.error("Select a community first");
+        if (!title.trim()) return toast.error("Title is required");
+
+        setLoading(true);
+        const toastId = toast.loading('Publishing to the human network...');
+
+        try {
+            let finalMediaUrls = [];
+
+            // 1. Upload media if any
+            if (mediaFiles.length > 0) {
+                const formData = new FormData();
+                mediaFiles.forEach(m => formData.append('images', m.file));
+                
+                const { data: uploadData } = await api.post('/posts/upload', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                finalMediaUrls = uploadData.urls;
+            }
+
+            // 2. Create Post
+            const postPayload = {
+                title,
+                body: activeTab === 'text' ? body : '',
+                communityId: selectedCommunity,
+                mediaUrls: finalMediaUrls,
+                status: 'pending'
+            };
+
+            await api.post('/posts', postPayload);
+            toast.success("Identity verified. Post queued.", { id: toastId });
+            navigate('/feed');
+        } catch (err) {
+            console.error(err);
+            toast.error(err.response?.data?.message || "Transmission failed", { id: toastId });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
-        <div style={{ maxWidth: '780px', margin: '0 auto', padding: '0 16px' }}>
-            {/* Header Area */}
-            <div style={{ padding: '24px 0', borderBottom: '1px solid var(--border-color)', marginBottom: '24px' }}>
-                <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'white', fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.5px' }}>
-                    Create a Human Post
-                </h1>
+        <div className="max-w-[780px] mx-auto px-4 py-8">
+            <div className="flex justify-between items-center mb-6 border-b border-reddit-dark-border pb-4">
+                <h1 className="text-xl font-bold text-white tracking-tight">Create a post</h1>
+                <button className="text-xs font-black text-reddit-text-dim hover:text-white uppercase tracking-widest flex items-center gap-2">
+                    <FaRegEdit /> Drafts
+                </button>
+
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '24px', alignItems: 'start' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {/* Community Selector */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <select 
-                            className="community-selector"
-                            value={selectedCommunity}
-                            onChange={(e) => setSelectedCommunity(e.target.value)}
+            {/* Community Picker */}
+            <div className="mb-6 relative group">
+                <select 
+                    value={selectedCommunity}
+                    onChange={(e) => setSelectedCommunity(e.target.value)}
+                    className="w-[300px] bg-reddit-dark-surface border border-reddit-dark-border rounded-xl p-3 text-sm font-bold text-white focus:outline-none focus:border-white transition-all appearance-none cursor-pointer"
+                >
+                    <option value="" disabled>Select a community</option>
+                    {communities.map(c => (
+                        <option key={c._id} value={c._id}>r/{c.slug}</option>
+                    ))}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">▼</div>
+            </div>
+
+            {/* Main Editor Card */}
+            <div className="reddit-card border-none bg-reddit-dark-bg flex flex-col overflow-hidden">
+                {/* Tabs */}
+                <div className="flex border-b border-reddit-dark-border bg-reddit-dark-surface/30">
+                    {TABS.map(tab => (
+                        <button
+                            key={tab.key}
+                            disabled={tab.disabled}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`flex-1 p-4 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest transition-all border-b-2 ${
+                                activeTab === tab.key 
+                                ? 'text-reddit-orange border-reddit-orange bg-reddit-orange/5' 
+                                : 'text-reddit-text-dim border-transparent hover:bg-reddit-dark-surface/50 grayscale'
+                            } ${tab.disabled && 'opacity-20 cursor-not-allowed'}`}
                         >
-                            <option value="" disabled>Choose a community</option>
-                            {communities.map(c => (
-                                <option key={c._id} value={c._id}>d/{c.slug}</option>
-                            ))}
-                        </select>
-                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 700 }}>VERIFIED HUMAN ZONE</span>
-                    </div>
-
-                    {/* Tab Navigation */}
-                    <div className="reddit-card" style={{ display: 'flex', background: 'var(--surface-color)', borderRadius: '12px' }}>
-                        {TABS.map(tab => (
-                            <button
-                                key={tab.key}
-                                onClick={() => setActiveTab(tab.key)}
-                                style={{
-                                    flex: 1, padding: '14px',
-                                    border: 'none', borderBottom: `2.5px solid ${activeTab === tab.key ? 'var(--brand-color)' : 'transparent'}`,
-                                    background: 'transparent', cursor: 'pointer',
-                                    color: activeTab === tab.key ? 'white' : 'var(--text-secondary)',
-                                    fontWeight: 800, fontSize: '13px', fontFamily: 'Outfit, sans-serif',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                                    transition: 'var(--tr-fast)',
-                                    textTransform: 'uppercase', letterSpacing: '0.5px'
-                                }}
-                            >
-                                <span style={{ fontSize: '16px' }}>{tab.icon}</span>
-                                <span>{tab.label}</span>
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Main Content Editor */}
-                    <motion.div 
-                        key={activeTab}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="reddit-card" 
-                        style={{ padding: '20px', borderRadius: '16px' }}
-                    >
-                        {loadingCommunities ? (
-                            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                                Preparing human-verified workspace...
-                            </div>
-                        ) : (
-                            <PostEditor 
-                                communityId={selectedCommunity} 
-                                onSuccess={() => window.location.href = '/feed'} 
-                            />
-                        )}
-                    </motion.div>
+                            <span className="text-sm">{tab.icon}</span>
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
 
-                {/* Sidebar Widgets */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div className="reddit-card" style={{ overflow: 'hidden', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-                        <div className="widget-header">
-                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--brand-color)' }} />
-                            <span style={{ fontWeight: 800, fontSize: '12px', color: 'white', textTransform: 'uppercase' }}>Human Protocol</span>
+                <div className="p-4 bg-reddit-dark-surface/20 flex flex-col gap-4">
+                    {/* Title (Always present) */}
+                    <div className="relative">
+                        <input 
+                            type="text" 
+                            placeholder="Title*" 
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            maxLength={300}
+                            className="w-full bg-reddit-dark-surface border border-reddit-dark-border rounded-xl p-4 text-sm font-medium text-white placeholder:text-zinc-600 focus:outline-none focus:border-white transition-all"
+                        />
+                        <div className="absolute right-4 bottom-2 text-[10px] font-black text-zinc-600 uppercase tracking-widest">
+                            {title.length}/300
                         </div>
-                        <ul style={{ margin: 0, padding: '0 16px', listStyle: 'none' }}>
-                            {[
-                                'Remember the human behind the screen.',
-                                'AI-generated text is strictly prohibited.',
-                                'Verify facts before publishing.',
-                                'Respect community boundaries.',
-                                'Maintain authentic creativity.'
-                            ].map((rule, idx) => (
-                                <li key={idx} className="rule-item">
-                                    <span style={{ color: 'var(--brand-color)', fontWeight: 800, marginRight: '8px' }}>{idx + 1}.</span>
-                                    {rule}
-                                </li>
-                            ))}
-                        </ul>
                     </div>
 
-                    <div style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px dashed var(--border-color)' }}>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                            All content on DHRUVIT is scanned for machine patterns. Anonymous human verification is applied to every post.
-                        </div>
+                    {/* Content Area */}
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={activeTab}
+                            initial={{ opacity: 0, scale: 0.98 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.98 }}
+                            transition={{ duration: 0.15 }}
+                        >
+                            {activeTab === 'text' && (
+                                <div className="premium-editor">
+                                    <ReactQuill 
+                                        theme="snow" 
+                                        value={body} 
+                                        onChange={setBody} 
+                                        placeholder="Body text (optional)"
+                                        style={{ minHeight: '180px' }}
+                                    />
+                                    <style>{`
+                                        .premium-editor .ql-container { border: 1px solid var(--border-color) !important; border-radius: 0 0 12px 12px !important; color: white !important; font-family: inherit; font-size: 14px; min-height: 180px; }
+                                        .premium-editor .ql-toolbar { background: var(--surface-elevated) !important; border: 1px solid var(--border-color) !important; border-radius: 12px 12px 0 0 !important; }
+                                        .premium-editor .ql-editor.ql-blank::before { color: var(--text-muted) !important; font-style: normal; }
+                                        .premium-editor .ql-stroke { stroke: #d7dadc !important; }
+                                        .premium-editor .ql-fill { fill: #d7dadc !important; }
+                                        .premium-editor .ql-picker { color: #d7dadc !important; }
+                                    `}</style>
+                                </div>
+                            )}
+
+                            {activeTab === 'image' && (
+                                <MediaUpload value={mediaFiles} onChange={setMediaFiles} />
+                            )}
+
+                            {activeTab === 'link' && (
+                                <input 
+                                    type="url" 
+                                    placeholder="Url"
+                                    className="w-full bg-reddit-dark-surface border border-reddit-dark-border rounded-xl p-4 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-white transition-all"
+                                />
+                            )}
+                        </motion.div>
+                    </AnimatePresence>
+
+                    {/* Action Bar */}
+                    <div className="flex justify-end gap-3 pt-4 border-t border-reddit-dark-border mt-2">
+                        <button 
+                            onClick={() => navigate('/feed')}
+                            className="px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-widest text-reddit-orange border border-reddit-orange hover:bg-reddit-orange/5 transition-all"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            disabled={loading || !title.trim()}
+                            onClick={handlePublish}
+                            className="px-8 py-2.5 rounded-full text-xs font-black uppercase tracking-widest text-white bg-reddit-orange hover:bg-reddit-orange-hover disabled:opacity-20 transition-all shadow-lg"
+                        >
+                            {loading ? 'Verifying...' : 'Post'}
+                        </button>
                     </div>
                 </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-between p-4 reddit-card bg-reddit-dark-surface/10">
+                <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-brand-success animate-pulse" />
+                    <span className="text-[10px] font-black text-brand-muted uppercase tracking-[0.2em]">Signal encrypted & anonymized</span>
+                </div>
+                <div className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Reddit Protocol v2.4</div>
             </div>
         </div>
     );

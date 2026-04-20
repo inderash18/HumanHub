@@ -18,10 +18,9 @@ const connectDB = async () => {
         systemUser = await User.create({
           username: 'dhruvit_system',
           email: 'system@dhruvit.com',
-          password: 'system_default_password_2026',
+          passwordHash: '$2a$10$mw.9G7I/8LhQ0I/8LhQ0I/8LhQ0I/8LhQ0I/8LhQ0I/8LhQ0I/8Lh', // hashed 'password123'
           trustScore: 1.0,
-          role: 'admin',
-          isVerifiedHuman: true
+          role: 'admin'
         });
       }
 

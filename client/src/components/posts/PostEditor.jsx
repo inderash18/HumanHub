@@ -4,11 +4,13 @@ import 'react-quill/dist/quill.snow.css';
 import { createPost } from '../../services/postService';
 import { useAuthStore } from '../../store/authStore';
 import { toast } from 'react-hot-toast';
+import FileUploader from '../ui/FileUploader';
 
 export default function PostEditor({ communityId = null, onSuccess }) {
     const { isAuthenticated } = useAuthStore();
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
+    const [mediaUrl, setMediaUrl] = useState('');
     const [loading, setLoading] = useState(false);
 
     if (!isAuthenticated) {
@@ -33,7 +35,12 @@ export default function PostEditor({ communityId = null, onSuccess }) {
 
         setLoading(true);
         try {
-            const payload = { title, body, communityId, mediaUrls: [] };
+            const payload = { 
+                title, 
+                body, 
+                communityId, 
+                mediaUrls: mediaUrl ? [mediaUrl] : [] 
+            };
             await createPost(payload);
             toast.success("Identity verified. Post published.");
             setTitle('');
@@ -73,7 +80,7 @@ export default function PostEditor({ communityId = null, onSuccess }) {
                      value={body} 
                      onChange={setBody} 
                      placeholder="Unleash your human creativity..."
-                     style={{ height: '240px', marginBottom: '44px' }}
+                     style={{ height: '180px', marginBottom: '44px' }}
                  />
                  <style>{`
                     .premium-editor .ql-container {
@@ -97,6 +104,14 @@ export default function PostEditor({ communityId = null, onSuccess }) {
                     .premium-editor .ql-fill { fill: var(--text-secondary) !important; }
                     .premium-editor .ql-picker { color: var(--text-secondary) !important; }
                  `}</style>
+            </div>
+
+            <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-brand-muted uppercase tracking-widest pl-1">Media Attachment (Optional)</label>
+                <FileUploader 
+                    onUploadComplete={(url) => setMediaUrl(url)} 
+                    currentImage={mediaUrl}
+                />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>

@@ -2,42 +2,76 @@ import asyncHandler from '../utils/asyncHandler.js';
 import User from '../models/User.js';
 import Post from '../models/Post.js';
 
-// @desc    Get user profile 
-// @route   GET /api/users/:username
+// @desc    Get user profile by ID or username
+// @route   GET /api/users/:id
 // @access  Public
 export const getUserProfile = asyncHandler(async (req, res) => {
-  const user = await User.findOne({ username: req.params.username })
-    .select('-passwordHash -email'); // Don't expose private info
+  const identifier = req.params.id;
+  const isObjectId = identifier.match(/^[0-9a-fA-F]{24}$/);
+
+  const user = await (isObjectId 
+    ? User.findById(identifier) 
+    : User.findOne({ username: identifier }))
+    .select('-passwordHash -email');
 
   if (!user) {
     res.status(404);
     throw new Error('User not found');
   }
 
-  // Fetch their verified posts
   const posts = await Post.find({ author: user._id, status: 'published' })
     .populate('community', 'name slug')
     .sort({ createdAt: -1 })
     .limit(10);
 
-  res.json({
-    profile: user,
-    posts
-  });
+  res.json({ profile: user, posts });
 });
 
 // @desc    Update user profile
 // @route   PUT /api/users/me
 // @access  Private
 export const updateUserProfile = asyncHandler(async (req, res) => {
-    // Boilerplate for bio / avatar updates
-    res.status(200).json({ message: "Profile updated" });
+    const user = await User.findById(req.user._id);
+    if (!user) {
+        res.status(404);
+        throw new Error('User not found');
+    }
+
+    user.bio = req.body.bio || user.bio;
+    user.avatar = req.body.avatar || user.avatar;
+
+    const updatedUser = await user.save();
+    res.json({
+        _id: updatedUser._id,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        bio: updatedUser.bio,
+        avatar: updatedUser.avatar,
+        trustScore: updatedUser.trustScore
+    });
 });
 
-// @desc    Get notifications
-// @route   GET /api/users/me/notifications
+// @desc    Delete user account
+// @route   DELETE /api/users/me
 // @access  Private
-export const getNotifications = asyncHandler(async (req, res) => {
-    // Boilerplate mapping to Notification models usually accessed from sockets directly
-    res.status(200).json([]);
+export const deleteUser = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    console.log(`[Identity Purge] Initiating for User: ${userId}`);
+
+    const user = await User.findByIdAndDelete(userId);
+    if (!user) {
+        res.status(404);
+        throw new Error('Identity not found in database');
+    }
+
+    // Clear refresh token cookies to prevent accidental re-discovery
+    res.cookie('refreshToken', '', {
+        httpOnly: true,
+        expires: new Date(0)
+    });
+
+    console.log(`[Identity Purge] Successfully removed: ${userId}`);
+    res.json({ message: 'User account permanently purged from HumanHub' });
 });
+
+

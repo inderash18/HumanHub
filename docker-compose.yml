@@ -16,6 +16,9 @@ services:
       context: ./client
     ports:
       - "3000:3000"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
     environment:
       - VITE_API_URL=http://localhost/api
       - VITE_SOCKET_URL=http://localhost
@@ -23,10 +26,16 @@ services:
   backend:
     build:
       context: ./server
+    command: npm run dev
     ports:
       - "5000:5000"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+      - ./server/uploads:/app/uploads
     environment:
       - PORT=5000
+      - BACKEND_URL=http://localhost/api
       - MONGODB_URI=mongodb+srv://inderash18_db_user:mongodb10@cluster0.zrs1ebj.mongodb.net/humanhub?retryWrites=true&w=majority
       - PG_URI=postgresql://postgres:postgres@postgres:5432/humanhub
       - REDIS_URL=redis://redis:6379
@@ -36,6 +45,7 @@ services:
       - mongo
       - postgres
       - redis
+
 
   ai_services:
     build:

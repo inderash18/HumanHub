@@ -8,6 +8,13 @@ export default {
     extend: {
       colors: {
         // Reddit-exact color palette (dark mode)
+        brand: {
+          gold: '#ffd635',
+          muted: '#818384',
+          success: '#46d160',
+          danger: '#ff4500',
+          blue: '#0079d3',
+        },
         reddit: {
           bg: '#dae0e6',          // Reddit light bg
           'dark-bg': '#1a1a1b',   // Reddit dark bg
@@ -23,11 +30,9 @@ export default {
           downvote: '#7193ff',
           text: '#d7dadc',
           'text-dim': '#818384',
-          gold: '#ffd635',
-          silver: '#c6c9ce',
-          green: '#46d160',
         }
       },
+
       fontFamily: {
         ibm: ['"IBM Plex Sans"', 'sans-serif'],
         noto: ['"Noto Sans"', 'sans-serif'],

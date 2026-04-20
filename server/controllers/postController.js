@@ -52,6 +52,7 @@ export const createPost = asyncHandler(async (req, res) => {
     status: 'pending'
   });
 
+
   // 2. Push job to Redis queue for moderation microservices
   await redis.lpush('moderation:queue', JSON.stringify({
     postId: post._id,

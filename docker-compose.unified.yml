@@ -1,0 +1,159 @@
+services:
+  # --- CORE PLATFORM ---
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - frontend
+      - backend
+
+  frontend:
+    build:
+      context: ./client
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost/api
+      - VITE_SOCKET_URL=http://localhost
+
+  backend:
+    build:
+      context: ./server
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    environment:
+      - PORT=5000
+      - MONGODB_URI=mongodb://mongo:27017/humanhub
+      - PG_URI=postgresql://postgres:postgres@postgres:5432/humanhub
+      - REDIS_URL=redis://redis:6379
+      - FRONTEND_URL=http://localhost
+      - AI_SERVICE_URL=http://orchestrator:8000 # Pointing to the new orchestrator
+    depends_on:
+      - mongo
+      - postgres
+      - redis
+      - orchestrator
+
+  # --- DATABASES ---
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=humanhub
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  mongo:
+    image: mongo:6
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  # --- AI DETECTION SUITE (50-LAYER PIPE) ---
+  orchestrator:
+    build:
+      context: ./detection_platform
+      dockerfile: Dockerfile.base
+    command: uvicorn services.orchestrator.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./detection_platform:/app
+    depends_on:
+      - metadata-analyzer
+      - image-detector
+      - trust-score-engine
+
+  metadata-analyzer:
+    build:
+      context: ./detection_platform
+      dockerfile: Dockerfile.base
+    command: uvicorn services.metadata_analyzer.main:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./detection_platform:/app
+
+  image-detector:
+    build:
+      context: ./detection_platform
+      dockerfile: Dockerfile.base
+    command: uvicorn services.image_detector.main:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./detection_platform:/app
+
+  trust-score-engine:
+    build:
+      context: ./detection_platform
+      dockerfile: Dockerfile.base
+    command: uvicorn services.trust_score_engine.main:app --host 0.0.0.0 --port 8009
+    ports:
+      - "8009:8009"
+    volumes:
+      - ./detection_platform:/app
+
+  gateway:
+    build:
+      context: ./detection_platform
+      dockerfile: Dockerfile.base
+    command: uvicorn services.gateway.main:app --host 0.0.0.0 --port 8011
+    ports:
+      - "8011:8011"
+    volumes:
+      - ./detection_platform:/app
+
+  upload-service:
+    build:
+      context: ./detection_platform
+      dockerfile: Dockerfile.base
+    command: uvicorn services.upload.main:app --host 0.0.0.0 --port 8010
+    ports:
+      - "8010:8010"
+    volumes:
+      - ./detection_platform:/app
+      - /tmp/humanhub_uploads:/tmp/humanhub_uploads
+
+  text-detector:
+    build:
+      context: ./detection_platform
+      dockerfile: Dockerfile.base
+    command: uvicorn services.text_detector.main:app --host 0.0.0.0 --port 8006
+    ports:
+      - "8006:8006"
+    volumes:
+      - ./detection_platform:/app
+
+  behavior-engine:
+    build:
+      context: ./detection_platform
+      dockerfile: Dockerfile.base
+    command: uvicorn services.behavior_engine.main:app --host 0.0.0.0 --port 8007
+    ports:
+      - "8007:8007"
+    volumes:
+      - ./detection_platform:/app
+
+volumes:
+  pg_data:
+  mongo_data:
+
+networks:
+  default:

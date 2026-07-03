@@ -6,5 +6,13 @@ export const useUIStore = create((set) => ({
   
   modalView: null, // "waitlist" | "report" | "auth" | null
   openModal: (view) => set({ modalView: view }),
-  closeModal: () => set({ modalView: null })
+  closeModal: () => set({ modalView: null }),
+
+  // Theme support
+  theme: localStorage.getItem('theme') || 'dark', // Defaulting to dark as standard premium look
+  toggleTheme: () => set((state) => {
+    const nextTheme = state.theme === 'light' ? 'dark' : 'light';
+    localStorage.setItem('theme', nextTheme);
+    return { theme: nextTheme };
+  })
 }));

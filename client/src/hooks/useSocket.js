@@ -1,40 +1,40 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { toast } from 'react-hot-toast';
 
+let socketInstance = null;
+
 export const useSocket = () => {
     const { user, isAuthenticated } = useAuthStore();
     const addNotification = useNotificationStore(state => state.addNotification);
-    const socketRef = useRef(null);
 
     useEffect(() => {
         if (!isAuthenticated || !user) {
-            if (socketRef.current) {
-                socketRef.current.disconnect();
-                socketRef.current = null;
+            if (socketInstance) {
+                socketInstance.disconnect();
+                socketInstance = null;
             }
             return;
         }
 
-        if (!socketRef.current) {
-            socketRef.current = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
+        if (!socketInstance) {
+            socketInstance = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
                 withCredentials: true,
                 autoConnect: true,
             });
 
-            socketRef.current.on('connect', () => {
-                socketRef.current.emit('join_user_channel', user._id);
+            socketInstance.on('connect', () => {
+                socketInstance.emit('join_user_channel', user._id);
             });
 
-            socketRef.current.on('notification:new', (payload) => {
+            socketInstance.on('notification:new', (payload) => {
                 addNotification(payload);
                 toast(`New notification: ${payload.message}`, { icon: '🔔' });
             });
 
-            socketRef.current.on('post:verified', (payload) => {
-                // Allows specific page listeners to see
+            socketInstance.on('post:verified', (payload) => {
                 window.dispatchEvent(new CustomEvent('post:verified:event', { detail: payload }));
                 
                 if (payload.status === 'published') {
@@ -44,11 +44,7 @@ export const useSocket = () => {
                 }
             });
         }
-
-        return () => {
-             // Cleanup if component fully unmounts, though usually scoped globally in App
-        };
     }, [isAuthenticated, user, addNotification]);
 
-    return socketRef.current;
+    return socketInstance;
 };

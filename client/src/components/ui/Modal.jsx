@@ -12,7 +12,7 @@ export default function Modal({ isOpen, onClose, title, children, className = ''
                         animate={{ opacity: 1 }} 
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="absolute inset-0 bg-brand-bg/80 backdrop-blur-sm"
+                        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
                     />
                     
                     {/* Modal Content */}
@@ -20,12 +20,12 @@ export default function Modal({ isOpen, onClose, title, children, className = ''
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className={`relative w-full max-w-lg glass bg-brand-surface shadow-2xl rounded-2xl overflow-hidden border border-white/10 ${className}`}
+                        className={`relative w-full max-w-lg bg-[var(--surface-color)] shadow-2xl rounded-[20px] overflow-hidden border border-[var(--border-color)] ${className}`}
                     >
-                        <div className="flex justify-between items-center p-6 border-b border-white/5">
-                            <h3 className="font-playfair text-xl font-bold text-white">{title}</h3>
-                            <button onClick={onClose} className="p-1 rounded-md text-brand-muted hover:text-white hover:bg-white/10 transition">
-                                <RiCloseLine size={24} />
+                        <div className="flex justify-between items-center p-6 border-b border-[var(--border-color)]">
+                            <h3 className="font-brand text-lg font-bold text-[var(--text-primary)]">{title}</h3>
+                            <button onClick={onClose} className="p-1 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition">
+                                <RiCloseLine size={22} />
                             </button>
                         </div>
                         <div className="p-6">

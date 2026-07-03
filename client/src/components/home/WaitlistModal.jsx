@@ -13,7 +13,7 @@ export default function WaitlistModal({ isOpen, onClose }) {
     e.preventDefault();
     setLoading(true);
     try {
-        await api.post('/api/waitlist', formData);
+        await api.post('/waitlist', formData);
         setSuccess(true);
     } catch (err) {
         toast.error(err.response?.data?.message || 'Failed to join waitlist');
@@ -26,9 +26,9 @@ export default function WaitlistModal({ isOpen, onClose }) {
       return (
           <Modal isOpen={isOpen} onClose={onClose} title="You're on the list.">
               <div className="text-center py-6">
-                  <div className="w-16 h-16 rounded-full bg-brand-success/20 text-brand-success flex items-center justify-center mx-auto mb-4 text-2xl">✓</div>
-                  <h3 className="text-xl text-white font-bold mb-2">Verification complete.</h3>
-                  <p className="text-brand-muted mb-6">We'll alert you the moment we open registrations for your cohort.</p>
+                  <div className="w-16 h-16 rounded-full bg-[var(--verified-color)]/20 text-[var(--verified-color)] flex items-center justify-center mx-auto mb-4 text-2xl">✓</div>
+                  <h3 className="text-lg text-[var(--text-primary)] font-bold mb-2">Verification complete.</h3>
+                  <p className="text-xs text-[var(--text-secondary)] mb-6">We'll alert you the moment we open registrations for your cohort.</p>
                   <Button onClick={onClose} className="w-full">Return</Button>
               </div>
           </Modal>
@@ -39,33 +39,33 @@ export default function WaitlistModal({ isOpen, onClose }) {
     <Modal isOpen={isOpen} onClose={onClose} title="Join the HumanHub Waitlist">
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
             <div>
-                <label className="block text-sm text-brand-muted font-mono mb-1">Full Name</label>
+                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">Full Name</label>
                 <input 
                    required
                    type="text" 
                    value={formData.name}
                    onChange={e => setFormData({...formData, name: e.target.value})}
-                   className="w-full bg-brand-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-brand-gold transition-colors" 
+                   className="premium-input text-xs font-semibold" 
                    placeholder="John Doe"
                 />
             </div>
             <div>
-                <label className="block text-sm text-brand-muted font-mono mb-1">Email Address</label>
+                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">Email Address</label>
                 <input 
                    required
                    type="email" 
                    value={formData.email}
                    onChange={e => setFormData({...formData, email: e.target.value})}
-                   className="w-full bg-brand-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-brand-gold transition-colors" 
+                   className="premium-input text-xs font-semibold" 
                    placeholder="john@example.com"
                 />
             </div>
             <div>
-                <label className="block text-sm text-brand-muted font-mono mb-1">I am a...</label>
+                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">I am a...</label>
                 <select 
                    value={formData.type}
                    onChange={e => setFormData({...formData, type: e.target.value})}
-                   className="w-full bg-brand-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-brand-gold transition-colors"
+                   className="premium-input text-xs font-bold appearance-none cursor-pointer bg-[var(--surface-color)]"
                 >
                     <option value="user">Content Creator / User</option>
                     <option value="investor">Venture Capitalist / Angel</option>

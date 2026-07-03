@@ -1,152 +1,175 @@
-import PostFeed from '../components/posts/PostFeed';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import Stories from '../components/home/Stories';
+import PostFeed from '../components/posts/PostFeed';
+import { FiPlus, FiTrendingUp, FiShield } from 'react-icons/fi';
+import api from '../services/api';
 
-const SORT_TABS = [
-    { key: 'hot', icon: '🔥', label: 'Hot' },
-    { key: 'new', icon: '✨', label: 'New' },
-    { key: 'top', icon: '📈', label: 'Top' },
-    { key: 'rising', icon: '⬆️', label: 'Rising' },
-];
-
-const TRENDING_SEARCHES = [
-    { title: 'Human Creativity vs AI', subtitle: 'The new era of digital art', icon: '🎨' },
-    { title: 'DHRUVIT Network Growth', subtitle: '1M+ verified humans joined', icon: '🚀' },
-    { title: 'Future of Verified Content', subtitle: 'Why human-only matters', icon: '🛡️' },
-    { title: 'The AI Singularity Debate', subtitle: 'Community discussion', icon: '🧠' },
+const VERIFICATION_TIPS = [
+    'Always review text perplexity scores in the detailed report.',
+    'Verified images contain cryptographically signed camera metadata.',
+    'User behavioral trust grows based on post consistency over time.'
 ];
 
 export default function FeedPage() {
     const { user, isAuthenticated } = useAuthStore();
     const navigate = useNavigate();
     const [sort, setSort] = useState('hot');
+    const [suggestions, setSuggestions] = useState([]);
+
+    useEffect(() => {
+        const loadSuggestions = async () => {
+            try {
+                const res = await api.get('/users/suggested/list');
+                setSuggestions(res.data);
+            } catch (err) {
+                console.error('Failed to load suggested users:', err);
+            }
+        };
+        if (isAuthenticated) {
+            loadSuggestions();
+        }
+    }, [isAuthenticated]);
 
     return (
-        <div style={{ display: 'flex', gap: '24px', width: '100%', maxWidth: '1280px', margin: '0 auto', padding: '16px' }}>
-            {/* Main feed */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-                
-                {/* Search Bar / Input */}
+        <div className="w-full max-w-[1200px] mx-auto flex gap-8 py-2 px-1">
+            {/* Left Feed Area */}
+            <div className="flex-1 min-w-0 flex flex-col gap-6">
+                {/* Stories Component */}
+                <div className="premium-card p-4">
+                    <Stories />
+                </div>
+
+                {/* Create Quick Post Input Bar */}
                 {isAuthenticated && (
-                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 8px', marginBottom: '24px' }}>
-                        <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--brand-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: '2px solid var(--border-color)' }}>
-                            {user?.avatar
-                                ? <img src={user.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                : <span style={{ color: 'white', fontWeight: 800 }}>{user?.username?.[0]?.toUpperCase()}</span>
-                            }
+                    <div className="premium-card p-4 flex items-center gap-3.5">
+                        <div className="w-10 h-10 rounded-full bg-[var(--brand-color)] flex items-center justify-center text-white font-bold select-none overflow-hidden">
+                            {user?.avatar ? (
+                                <img src={user.avatar} className="w-full h-full object-cover" alt="" />
+                            ) : (
+                                <span>{user?.username?.[0]?.toUpperCase()}</span>
+                            )}
                         </div>
-                        <div className="search-bar-pill" style={{ flex: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', background: '#0f0f0f' }} onClick={() => navigate('/submit')}>
-                             <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Create Post</span>
+                        <div 
+                            onClick={() => navigate('/submit')}
+                            className="flex-1 bg-[var(--surface-hover)] hover:bg-[var(--border-color)] text-[var(--text-secondary)] py-2.5 px-5 rounded-[16px] text-xs font-semibold cursor-pointer transition-all duration-150"
+                        >
+                            What authentic story are you sharing today, {user?.username}?
                         </div>
-                        <button className="sidebar-link" onClick={() => navigate('/submit')} title="Media" style={{ padding: '8px' }}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="22" height="22"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        <button 
+                            onClick={() => navigate('/submit')}
+                            className="btn-premium p-2.5 rounded-full"
+                            title="Create Post"
+                        >
+                            <FiPlus className="text-md" />
                         </button>
                     </div>
                 )}
 
-                {/* Trending section */}
-                <div style={{ marginBottom: '32px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px', paddingLeft: '8px' }}>Trending Locally</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
-                        {TRENDING_SEARCHES.map((t, i) => (
-                            <div key={i} className="reddit-card" style={{ padding: '16px', cursor: 'pointer' }}>
-                                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                                    <div style={{ fontSize: '20px' }}>{t.icon}</div>
-                                    <div>
-                                        <div style={{ fontWeight: 700, color: 'white', fontSize: '14px', marginBottom: '4px' }}>{t.title}</div>
-                                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{t.subtitle}</div>
-                                    </div>
-                                </div>
-                            </div>
+                {/* Feed Sort Filter Header */}
+                <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+                    <h2 className="text-md font-bold font-brand tracking-wide text-[var(--text-primary)]">Human Activity</h2>
+                    <div className="flex gap-1 bg-[var(--surface-hover)] p-1 rounded-full border border-[var(--border-color)]">
+                        {['hot', 'new', 'rising'].map((t) => (
+                            <button
+                                key={t}
+                                onClick={() => setSort(t)}
+                                className={`text-[11px] font-bold uppercase tracking-wider px-4 py-1.5 rounded-full transition-all duration-200 ${
+                                    sort === t 
+                                        ? 'bg-[var(--surface-color)] text-[var(--brand-color)] shadow-sm' 
+                                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                }`}
+                            >
+                                {t}
+                            </button>
                         ))}
                     </div>
                 </div>
 
-                {/* Sort Bar / Chips - Exactly like screenshot 1 */}
-                <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', marginBottom: '24px', gap: '8px' }}>
-                    {['Posts', 'Communities', 'Comments', 'Media', 'People'].map((label, idx) => (
-                        <button
-                            key={label}
-                            style={{ 
-                                padding: '8px 16px', fontSize: '14px', border: 'none', 
-                                background: idx === 0 ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                                color: 'white',
-                                borderRadius: '9999px',
-                                fontWeight: 700, cursor: 'pointer',
-                                transition: 'background 0.2s'
-                            }}
-                            onMouseEnter={e => idx !== 0 && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)')}
-                            onMouseLeave={e => idx !== 0 && (e.currentTarget.style.background = 'transparent')}
-                        >
-                            {label}
-                        </button>
-                    ))}
-                    
-                    <div style={{ marginLeft: '12px', height: '24px', width: '1px', background: 'var(--border-color)' }}></div>
-
-                    {['Relevance', 'All time'].map(filter => (
-                        <button
-                            key={filter}
-                            style={{ 
-                                padding: '8px 12px', fontSize: '13px', border: 'none', 
-                                background: 'transparent', color: 'var(--text-secondary)',
-                                fontWeight: 600, cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', gap: '4px'
-                            }}
-                        >
-                            <span>{filter}</span>
-                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M5 8l5 5 5-5z"/></svg>
-                        </button>
-                    ))}
-                </div>
-
+                {/* Main Infinite Feed */}
                 <PostFeed sort={sort} />
             </div>
 
-            {/* Right sidebar */}
-            <div style={{ width: '312px', flexShrink: 0, display: 'none' }} className="feed-right-sidebar">
-                <style>{`@media (min-width: 1100px) { .feed-right-sidebar { display: flex !important; flex-direction: column; gap: 16px; } }`}</style>
+            {/* Right Desktop Suggestions Sidebar */}
+            <div className="hidden lg:flex flex-col gap-6 w-[280px] flex-shrink-0">
+                {/* User Info Overview */}
+                {isAuthenticated && (
+                    <div className="premium-card p-4 flex items-center gap-3">
+                        <img 
+                            src={user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'} 
+                            alt="" 
+                            className="w-11 h-11 rounded-full border border-[var(--border-color)]"
+                        />
+                        <div className="flex flex-col min-w-0">
+                            <Link to={`/u/${user?.username}`} className="text-xs font-bold text-[var(--text-primary)] hover:underline truncate">{user?.username}</Link>
+                            <span className="text-[10px] text-[var(--text-secondary)]">Reputation Score: {(user?.trustScore * 100).toFixed(0)}%</span>
+                        </div>
+                        <Link 
+                            to="/verification-dashboard" 
+                            className="ml-auto text-[10px] font-bold text-[var(--brand-color)] hover:text-[var(--brand-hover)] transition-colors"
+                        >
+                            View Stats
+                        </Link>
+                    </div>
+                )}
 
-                {/* Home Widget */}
-                <div className="reddit-card" style={{ padding: '16px' }}>
-                    <h4 style={{ fontWeight: 800, color: 'var(--text-secondary)', fontSize: '11px', textTransform: 'uppercase', marginBottom: '16px' }}>Popular Communities</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {[
-                            { name: 'd/technology', members: '12.5M' },
-                            { name: 'd/science', members: '8.2M' },
-                            { name: 'd/creativity', members: '4.1M' }
-                        ].map((c, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--brand-color)' }}></div>
-                                    <div style={{ fontSize: '13px', fontWeight: 600 }}>{c.name}</div>
+                {/* Suggested Users */}
+                <div className="premium-card p-5 flex flex-col gap-4">
+                    <div className="flex justify-between items-center">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">Verified Humans</span>
+                        <span className="text-[10px] font-bold text-[var(--brand-color)] cursor-pointer">See All</span>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                        {suggestions.length === 0 ? (
+                            <span className="text-[10px] text-[var(--text-secondary)] italic">No verification suggestions available.</span>
+                        ) : (
+                            suggestions.map((u) => (
+                                <div key={u._id} className="flex items-center gap-3 animate-in">
+                                    <div className="w-8 h-8 rounded-full bg-[var(--brand-color)] flex items-center justify-center overflow-hidden border border-[var(--border-color)]">
+                                        {u.avatar ? (
+                                            <img src={u.avatar} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="text-white text-xs font-bold uppercase">{u.username?.[0]}</span>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-col min-w-0">
+                                        <Link to={`/u/${u.username}`} className="text-xs font-bold text-[var(--text-primary)] hover:underline truncate">{u.username}</Link>
+                                        <span className="text-[10px] text-[var(--text-secondary)] truncate">Trust Score: {(u.trustScore * 100).toFixed(0)}%</span>
+                                    </div>
+                                    <button className="ml-auto text-[10px] font-extrabold text-[var(--brand-color)] hover:text-[var(--brand-hover)] uppercase tracking-wide">
+                                        Follow
+                                    </button>
                                 </div>
-                                <button className="btn-dhruvit-outline" style={{ padding: '4px 12px', fontSize: '12px' }}>Join</button>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                {/* Verification Guidance */}
+                <div className="premium-card p-5 flex flex-col gap-4">
+                    <div className="flex items-center gap-2 text-[var(--verified-color)]">
+                        <FiShield className="text-md" />
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">Security Tips</span>
+                    </div>
+                    <div className="flex flex-col gap-3.5">
+                        {VERIFICATION_TIPS.map((tip, idx) => (
+                            <div key={idx} className="flex gap-2.5 items-start text-xs text-[var(--text-secondary)] leading-relaxed">
+                                <span className="text-[var(--verified-color)] font-bold font-mono">{idx + 1}.</span>
+                                <span>{tip}</span>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                {/* DHRUVIT Vision */}
-                <div className="reddit-card" style={{ background: 'linear-gradient(to right, #1a1a1b, #121213)' }}>
-                    <h4 style={{ fontWeight: 700, fontSize: '14px', marginBottom: '8px' }}>Experience Premium</h4>
-                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '12px' }}>
-                        Browse DHRUVIT without AI clutter. Support human creators directly.
-                    </p>
-                    <button className="btn-dhruvit" style={{ width: '100%', padding: '8px' }}>Upgrade Now</button>
-                </div>
-
-                {/* Legal / Footer */}
-                <div style={{ padding: '0 8px', fontSize: '10px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {/* Legal & Version Footer */}
+                <div className="px-2 text-[10px] text-[var(--text-muted)] leading-loose">
+                    <div className="flex flex-wrap gap-2">
                         <span>User Agreement</span>
                         <span>Privacy Policy</span>
                         <span>Content Policy</span>
-                        <span>Moderator Code of Conduct</span>
-                     </div>
-                     <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '12px 0' }} />
-                     <div>DHRUVIT Network © 2026. All rights reserved.</div>
+                    </div>
+                    <div className="mt-1">HumanHub Premium © 2026. All rights reserved.</div>
                 </div>
             </div>
         </div>

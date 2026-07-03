@@ -24,118 +24,116 @@ export default function RegisterPage() {
     };
 
     return (
-        <div style={{
-            minHeight: '100vh', background: 'var(--bg-color)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
-        }}>
+        <div 
+            className="w-full flex items-center justify-center p-4 relative"
+            style={{ minHeight: '100vh', background: 'var(--bg-color)' }}
+        >
+            {/* Ambient background glow elements */}
+            <div className="absolute top-[-10%] left-[-10%] w-[350px] h-[350px] bg-[#0095F6]/10 rounded-full blur-[90px] pointer-events-none" />
+            <div className="absolute bottom-[-10%] right-[-10%] w-[350px] h-[350px] bg-purple-500/10 rounded-full blur-[90px] pointer-events-none" />
+
             <motion.div 
-                initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                initial={{ opacity: 0, scale: 0.98, y: 12 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+                transition={{ duration: 0.4, ease: [0.25, 1, 0.5, 1] }}
+                className="w-full max-w-[920px] rounded-[28px] overflow-hidden flex flex-col md:flex-row shadow-2xl relative z-10"
                 style={{ 
-                    display: 'flex', width: '100%', maxWidth: '920px', 
-                    background: 'var(--surface-color)', borderRadius: '24px', 
-                    overflow: 'hidden', border: '1px solid var(--border-color)',
-                    boxShadow: '0 32px 64px -16px rgba(0,0,0,0.6)'
+                    background: 'var(--glass-bg)',
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)',
+                    border: '1px solid var(--glass-border)',
                 }}
             >
-                {/* Left panel */}
+                {/* Left panel: Mission banner */}
                 <div 
-                    className="auth-panel-left"
+                    className="w-full md:w-[380px] p-10 md:p-12 flex flex-col justify-between relative overflow-hidden"
                     style={{
-                        width: '380px', flexShrink: 0,
-                        background: 'linear-gradient(135deg, var(--brand-color) 0%, #a22c00 100%)',
-                        padding: '60px 48px', display: 'flex', flexDirection: 'column', 
-                        justifyContent: 'space-between', position: 'relative'
+                        background: 'linear-gradient(135deg, var(--brand-color) 0%, #7e22ce 100%)',
                     }}
                 >
-                    <div style={{ position: 'relative', zIndex: 1 }}>
-                         <div style={{ marginBottom: '40px' }}>
-                             <svg viewBox="0 0 100 100" width="64" height="64" style={{ filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.2))' }}>
-                                <circle cx="50" cy="50" r="48" fill="white" />
-                                <path d="M50 20 L50 80 M20 50 L80 50" stroke="var(--brand-color)" strokeWidth="10" strokeLinecap="round" />
-                             </svg>
-                         </div>
-                        <h1 style={{ color: 'white', fontSize: '36px', fontWeight: 800, lineHeight: 1.1, marginBottom: '24px', letterSpacing: '-1.5px', fontFamily: 'Outfit, sans-serif' }}>
-                            Start Your <br/>Human Journey.
-                        </h1>
-                        <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '16px', lineHeight: 1.6, fontWeight: 500 }}>
-                            Join 1M+ humans sharing authentic thoughts in an AI-free ecosystem.
-                        </p>
+                    <div className="relative z-10 flex flex-col gap-6">
+                        <svg viewBox="0 0 100 100" width="56" height="56" className="drop-shadow-lg">
+                            <circle cx="50" cy="50" r="48" fill="white" />
+                            <path d="M50 20 L50 80 M20 50 L80 50" stroke="var(--brand-color)" strokeWidth="9" strokeLinecap="round" />
+                        </svg>
+                        <div className="flex flex-col gap-3">
+                            <h1 className="font-brand text-3xl font-black text-white leading-tight tracking-tight">
+                                Start Your <br/>Human Journey.
+                            </h1>
+                            <p className="text-xs font-semibold leading-relaxed text-white/85 max-w-xs">
+                                Join 1M+ verified humans sharing authentic posts in an AI-free ecosystem.
+                            </p>
+                        </div>
                     </div>
-                    <div style={{ position: 'relative', zIndex: 1, color: 'white', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                         <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00ff7f', boxShadow: '0 0 12px #00ff7f' }}></div>
-                         <span>SECURED BY DHRUVIT-AI™</span>
+                    <div className="relative z-10 flex items-center gap-2 mt-8 md:mt-0">
+                         <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-pulse"></div>
+                         <span className="text-[10px] text-white font-extrabold uppercase tracking-widest">Secured by HumanHub-AI™</span>
                     </div>
                 </div>
 
-                {/* Right panel */}
-                <div style={{ flex: 1, padding: '60px 56px', background: 'var(--surface-color)' }}>
-                    <div style={{ marginBottom: '40px' }}>
-                        <h2 style={{ fontSize: '24px', fontWeight: 800, color: 'white', marginBottom: '8px', letterSpacing: '-0.5px' }}>
+                {/* Right panel: Inputs Form fields */}
+                <div className="flex-1 p-8 md:p-14 bg-transparent flex flex-col justify-center">
+                    <div className="mb-8">
+                        <h2 className="text-xl md:text-2xl font-black font-brand tracking-tight text-[var(--text-primary)] mb-1">
                             Create Account
                         </h2>
-                        <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                        <p className="text-xs text-[var(--text-secondary)] font-medium">
                             Already a member?{' '}
-                            <Link to="/login" style={{ color: 'var(--brand-color)', textDecoration: 'none', fontWeight: 700 }}>Log In</Link>
+                            <Link to="/login" className="text-[var(--brand-color)] hover:underline font-bold">Log In</Link>
                         </p>
                     </div>
 
-                    <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Username</label>
+                    <form onSubmit={onSubmit} className="flex flex-col gap-5">
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Username</label>
                             <input
                                 required
                                 type="text"
                                 placeholder="@HUMAN_CREATOR"
                                 value={formData.username}
                                 onChange={e => setFormData({ ...formData, username: e.target.value })}
-                                className="reddit-input"
+                                className="premium-input text-xs font-semibold"
                             />
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Email Address</label>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Email Address</label>
                             <input
                                 required
                                 type="email"
-                                placeholder="YOU@EXAMPLE.COM"
+                                placeholder="human@example.com"
                                 value={formData.email}
                                 onChange={e => setFormData({ ...formData, email: e.target.value })}
-                                className="reddit-input"
+                                className="premium-input text-xs font-semibold"
                             />
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Secret Password</label>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Secret Password</label>
                             <input
                                 required
                                 type="password"
                                 placeholder="••••••••••••"
                                 value={formData.password}
                                 onChange={e => setFormData({ ...formData, password: e.target.value })}
-                                className="reddit-input"
+                                className="premium-input text-xs font-semibold"
                             />
                         </div>
 
-                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5, margin: '8px 0' }}>
-                           DHRUVIT uses real-time biological verification cues to ensure authentic human interaction. Your data is encrypted and protected.
+                        <p className="text-[10.5px] text-[var(--text-muted)] leading-relaxed">
+                           HumanHub uses real-time biological verification cues to ensure authentic human interaction. Your data is encrypted and protected.
                         </p>
 
                         <button 
                             type="submit" 
                             disabled={loading} 
-                            className="btn-dhruvit" 
-                            style={{ 
-                                width: '100%', padding: '14px', fontSize: '15px', letterSpacing: '0.3px',
-                                boxShadow: '0 12px 24px -10px rgba(255, 69, 0, 0.4)'
-                            }}
+                            className="btn-premium w-full mt-2 py-3 text-xs uppercase tracking-wider font-extrabold"
                         >
-                            {loading ? 'INITIATING...' : 'CREATE IDENTITY'}
+                            {loading ? 'Initiating...' : 'Create Identity'}
                         </button>
 
-                        <div style={{ textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                            By joining, you agree to our <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Agreement</span>.
+                        <div className="text-[10.5px] text-[var(--text-muted)] text-center leading-relaxed mt-2">
+                            By joining, you agree to our <span className="text-[var(--text-secondary)] font-bold cursor-pointer hover:underline">User Agreement</span>.
                         </div>
                     </form>
                 </div>

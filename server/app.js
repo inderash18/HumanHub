@@ -12,6 +12,10 @@ import voteRoutes from './routes/votes.js';
 import moderationRoutes from './routes/moderation.js';
 import userRoutes from './routes/users.js';
 import waitlistRoutes from './routes/waitlist.js';
+import storiesRoutes from './routes/stories.js';
+import messagesRoutes from './routes/messages.js';
+import notificationRoutes from './routes/notifications.js';
+
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -66,7 +70,10 @@ app.use('/api/posts/upload', (await import('./routes/upload.js')).default);
 
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/waitlist', waitlistRoutes);
+app.use('/api/stories', storiesRoutes);
+app.use('/api/messages', messagesRoutes);
 
 app.get('/bootstrap', async (req, res) => {
     try {

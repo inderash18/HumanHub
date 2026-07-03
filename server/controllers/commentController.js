@@ -1,5 +1,7 @@
 import asyncHandler from '../utils/asyncHandler.js';
 import Comment from '../models/Comment.js';
+import Post from '../models/Post.js';
+import { createNotification } from './notificationController.js';
 
 // @desc    Create a new comment
 // @route   POST /api/comments
@@ -21,9 +23,6 @@ export const createComment = asyncHandler(async (req, res) => {
     }
   }
 
-  // Assuming text detection on comments via direct HTTP call since comments shouldn't queue like large video posts
-  // (In real scale, we might push them to Redis queue just the same)
-  
   const comment = await Comment.create({
     body,
     author: req.user._id,
@@ -31,6 +30,33 @@ export const createComment = asyncHandler(async (req, res) => {
     parent: parentId || null,
     depth
   });
+
+  // Fetch parent post
+  const postObj = await Post.findById(postId);
+  if (postObj) {
+    // 1. Notify post author
+    await createNotification({
+      recipient: postObj.author,
+      sender: req.user._id,
+      type: 'comment',
+      postId: postObj._id,
+      body: `@${req.user.username} commented on your post.`
+    });
+  }
+
+  // 2. Notify parent comment author if reply
+  if (parentId) {
+    const parentComment = await Comment.findById(parentId);
+    if (parentComment) {
+      await createNotification({
+        recipient: parentComment.author,
+        sender: req.user._id,
+        type: 'comment',
+        postId: postId,
+        body: `@${req.user.username} replied to your comment.`
+      });
+    }
+  }
 
   res.status(201).json(comment);
 });

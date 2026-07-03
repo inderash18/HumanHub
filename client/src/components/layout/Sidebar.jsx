@@ -1,105 +1,134 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-
-const popularCommunities = [
-  { slug: 'technology', name: 'd/technology', icon: '💻', color: 'rgba(255, 69, 0, 0.1)' },
-  { slug: 'science', name: 'd/science', icon: '🔬', color: 'rgba(70, 209, 96, 0.1)' },
-  { slug: 'worldnews', name: 'd/worldnews', icon: '🌍', color: 'rgba(0, 121, 211, 0.1)' },
-  { slug: 'creativity', name: 'd/creativity', icon: '🎨', color: 'rgba(255, 88, 91, 0.1)' },
-  { slug: 'gaming', name: 'd/gaming', icon: '🎮', color: 'rgba(113, 147, 255, 0.1)' },
-];
+import { useAuth } from '../../hooks/useAuth';
+import { useUIStore } from '../../store/uiStore';
+import { 
+  FiHome, 
+  FiCompass, 
+  FiFilm, 
+  FiMessageSquare, 
+  FiBell, 
+  FiPlusSquare, 
+  FiShield, 
+  FiBookmark, 
+  FiUser, 
+  FiSettings, 
+  FiLogOut,
+  FiMoon,
+  FiSun
+} from 'react-icons/fi';
 
 export default function Sidebar() {
     const { isAuthenticated, user } = useAuthStore();
+    const { handleLogout } = useAuth();
+    const { theme, toggleTheme } = useUIStore();
     const location = useLocation();
+    const navigate = useNavigate();
+
+    const onLogout = async () => {
+        await handleLogout();
+        navigate('/');
+    };
+
+    if (!isAuthenticated) return null;
+
+    const navItems = [
+        { path: '/feed', label: 'Home', icon: <FiHome className="text-lg" /> },
+        { path: '/explore', label: 'Explore', icon: <FiCompass className="text-lg" /> },
+        { path: '/reels', label: 'Reels', icon: <FiFilm className="text-lg" /> },
+        { path: '/messages', label: 'Messages', icon: <FiMessageSquare className="text-lg" /> },
+        { path: '/notifications', label: 'Notifications', icon: <FiBell className="text-lg" /> },
+        { path: '/submit', label: 'Create', icon: <FiPlusSquare className="text-lg" /> },
+        { path: '/verification-dashboard', label: 'Verification', icon: <FiShield className="text-lg" /> },
+        { path: '/settings', label: 'Settings', icon: <FiSettings className="text-lg" /> },
+    ];
 
     return (
-        <aside style={{ width: '260px', flexShrink: 0, paddingRight: '12px', overflowY: 'auto', height: 'calc(100vh - var(--nav-height))', position: 'sticky', top: 'var(--nav-height)', display: 'none' }} className="lg-sidebar no-scrollbar">
-            <style>{`
-                @media (min-width: 960px) { .lg-sidebar { display: flex !important; flex-direction: column; } }
-                .no-scrollbar::-webkit-scrollbar { display: none; }
-            `}</style>
-
-            {/* Main Navigation */}
-            <div style={{ padding: '8px 0' }}>
-                <Link to="/feed" className={`sidebar-link ${location.pathname === '/feed' ? 'active' : ''}`}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20">
-                        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-                    </svg>
-                    <span>Home Feed</span>
-                </Link>
-                <Link to="/popular" className={`sidebar-link ${location.pathname === '/popular' ? 'active' : ''}`}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20">
-                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                    </svg>
-                    <span>Popular</span>
-                </Link>
-                <Link to="/explore" className={`sidebar-link ${location.pathname === '/explore' ? 'active' : ''}`}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20">
-                        <circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"/>
-                    </svg>
-                    <span>Explore</span>
-                </Link>
+        <aside 
+            className="fixed left-6 top-[calc(var(--nav-height)+24px)] bottom-6 w-[72px] hover:w-[230px] flex flex-col justify-between p-3.5 z-40 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] rounded-[28px] overflow-hidden group/sidebar shadow-xl"
+            style={{
+                background: 'var(--glass-bg)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                border: '1px solid var(--glass-border)',
+            }}
+        >
+            {/* Sidebar Navigation Items */}
+            <div className="flex flex-col gap-1.5">
+                {navItems.map((item) => {
+                    const isActive = location.pathname === item.path || (item.path.startsWith('/u/') && location.pathname.startsWith('/u/'));
+                    return (
+                        <Link 
+                            key={item.path}
+                            to={item.path} 
+                            className={`flex items-center gap-4 px-3.5 py-3 rounded-[16px] font-medium tracking-wide transition-all duration-200 relative group/item ${
+                                isActive 
+                                    ? 'text-[var(--brand-color)] bg-[var(--surface-color)]/30 border border-[var(--border-color)]' 
+                                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]/30 hover:text-[var(--text-primary)] border border-transparent'
+                            }`}
+                        >
+                            {/* Linear Active Indicator Pill */}
+                            {isActive && (
+                                <div className="absolute left-0 w-1 h-5 rounded-r-full bg-[var(--brand-color)]" />
+                            )}
+                            <span className={`transition-transform duration-200 group-hover/item:scale-105 flex-shrink-0 ${isActive ? 'text-[var(--brand-color)]' : 'text-[var(--text-secondary)]'}`}>
+                                {item.icon}
+                            </span>
+                            <span className="text-[13px] font-bold tracking-tight whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
+                                {item.label}
+                            </span>
+                        </Link>
+                    );
+                })}
             </div>
 
-            <div className="sidebar-label">Communities</div>
-            <div style={{ paddingBottom: '8px' }}>
-                {popularCommunities.map((c) => (
-                    <Link key={c.slug} to={`/c/${c.slug}`} className={`sidebar-link ${location.pathname === `/c/${c.slug}` ? 'active' : ''}`}>
-                        <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: c.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', flexShrink: 0 }}>
-                            {c.icon}
-                        </div>
-                        <span style={{ fontSize: '14px' }}>{c.name}</span>
-                    </Link>
-                ))}
-                <button className="sidebar-link" style={{ background: 'none', border: 'none', width: '100%', cursor: 'pointer', color: 'var(--brand-color)' }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="18" height="18">
-                        <path d="M12 5v14M5 12h14"/>
-                    </svg>
-                    <span style={{ fontWeight: 700 }}>Record Community</span>
+            {/* Bottom Actions & User Profile Card */}
+            <div className="flex flex-col gap-2.5 mt-auto pt-3 border-t border-[var(--border-color)]">
+                {/* Theme Toggle Button */}
+                <button 
+                    onClick={toggleTheme}
+                    className="flex items-center gap-4 px-3.5 py-3 rounded-[16px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]/30 hover:text-[var(--text-primary)] transition-all font-medium border border-transparent"
+                >
+                    {theme === 'dark' ? (
+                        <>
+                            <FiSun className="text-lg text-yellow-500 flex-shrink-0" />
+                            <span className="text-[13px] font-bold tracking-tight whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">Light Mode</span>
+                        </>
+                    ) : (
+                        <>
+                            <FiMoon className="text-lg text-indigo-500 flex-shrink-0" />
+                            <span className="text-[13px] font-bold tracking-tight whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">Dark Mode</span>
+                        </>
+                    )}
                 </button>
-            </div>
 
-            <div className="sidebar-label">Resources</div>
-            <div style={{ paddingBottom: '16px' }}>
-                <Link to="/about" className="sidebar-link">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="18" height="18"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-                    <span>Mission</span>
-                </Link>
-                <Link to="/help" className="sidebar-link">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="18" height="18"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    <span>Human Help</span>
+                {/* Logout Button */}
+                <button 
+                    onClick={onLogout}
+                    className="flex items-center gap-4 px-3.5 py-3 rounded-[16px] text-red-500 hover:bg-red-500/5 transition-all font-medium border border-transparent"
+                >
+                    <FiLogOut className="text-lg flex-shrink-0" />
+                    <span className="text-[13px] font-bold tracking-tight whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">Logout</span>
+                </button>
+
+                {/* Micro User Detail Card */}
+                <Link 
+                    to={`/u/${user?.username}`}
+                    className="flex items-center gap-3 p-1.5 rounded-[18px] hover:bg-[var(--surface-hover)] transition-all border border-[var(--border-color)] bg-[var(--surface-color)]/20"
+                >
+                    <div className="w-[38px] h-[38px] rounded-full bg-[var(--brand-color)] flex items-center justify-center overflow-hidden border border-[var(--border-color)] flex-shrink-0">
+                        {user?.avatar ? (
+                            <img src={user.avatar} className="w-full h-full object-cover" alt="" />
+                        ) : (
+                            <span className="text-white font-bold text-xs uppercase">{user?.username?.[0]}</span>
+                        )}
+                    </div>
+                    <div className="flex flex-col min-w-0 opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
+                        <span className="text-[12px] font-bold text-[var(--text-primary)] truncate">{user?.username}</span>
+                        <span className="text-[9.5px] text-[var(--verified-color)] font-bold uppercase tracking-wider">Human Verified</span>
+                    </div>
                 </Link>
             </div>
-
-            {/* Certification Footer */}
-            {isAuthenticated && (
-                 <div style={{ marginTop: 'auto', padding: '16px 8px' }}>
-                    <div className="reddit-card" style={{ 
-                        background: 'linear-gradient(135deg, #1A1A1B 0%, #0F0F0F 100%)', 
-                        padding: '16px',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '16px'
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00ff7f', boxShadow: '0 0 10px rgba(0,255,127,0.3)' }} />
-                            <span style={{ fontSize: '10px', fontWeight: 900, color: '#00ff7f', letterSpacing: '1px' }}>CERTIFIED HUMAN</span>
-                        </div>
-                        <div style={{ fontSize: '13px', color: 'white', fontWeight: 700, marginBottom: '4px' }}>
-                            {user?.username}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                            Your account is fully verified. You can post and interact in all human-only zones.
-                        </div>
-                    </div>
-                    <div style={{ marginTop: '16px', padding: '0 8px', fontSize: '11px', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        <span>Privacy</span>
-                        <span>Terms</span>
-                        <span>Content Policy</span>
-                        <div style={{ width: '100%', marginTop: '4px' }}>DHRUVIT © 2026</div>
-                    </div>
-                </div>
-            )}
         </aside>
     );
 }

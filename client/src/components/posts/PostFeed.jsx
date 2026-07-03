@@ -5,23 +5,21 @@ import { useIntersection } from '../../hooks/useIntersection';
 
 function PostSkeleton() {
     return (
-        <div className="reddit-card" style={{ 
-            display: 'flex', marginBottom: '12px', overflow: 'hidden', padding: '16px',
-            background: 'var(--surface-color)', border: '1px solid var(--border-color)',
-            flexDirection: 'column', gap: '12px'
-        }}>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--surface-elevated)', animation: 'pulse 1.5s infinite' }} />
-                <div style={{ width: '120px', height: '10px', borderRadius: '4px', background: 'var(--surface-elevated)', animation: 'pulse 1.5s 0.2s infinite' }} />
+        <div className="premium-card p-5 mb-4 flex flex-col gap-4 bg-[var(--surface-color)] border border-[var(--border-color)]">
+            <div className="flex gap-3 items-center">
+                <div className="w-10 h-10 rounded-full bg-[var(--surface-hover)] animate-pulse" />
+                <div className="flex flex-col gap-2">
+                    <div className="w-24 h-3 rounded-full bg-[var(--surface-hover)] animate-pulse" />
+                    <div className="w-16 h-2 rounded-full bg-[var(--surface-hover)] animate-pulse" />
+                </div>
             </div>
-            <div style={{ width: '90%', height: '20px', borderRadius: '4px', background: 'var(--surface-elevated)', animation: 'pulse 1.5s 0.3s infinite' }} />
-            <div style={{ width: '70%', height: '14px', borderRadius: '4px', background: 'var(--surface-elevated)', animation: 'pulse 1.5s 0.4s infinite' }} />
-            <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
-                {[1, 2, 3].map(i => (
-                    <div key={i} style={{ width: '60px', height: '28px', borderRadius: '20px', background: 'var(--surface-elevated)', animation: 'pulse 1.5s 0.5s infinite' }} />
-                ))}
+            <div className="w-[85%] h-4 rounded-full bg-[var(--surface-hover)] animate-pulse" />
+            <div className="w-[60%] h-3 rounded-full bg-[var(--surface-hover)] animate-pulse" />
+            <div className="flex gap-4 border-t border-[var(--border-color)] pt-3.5 mt-1">
+                <div className="w-12 h-6 rounded-full bg-[var(--surface-hover)] animate-pulse" />
+                <div className="w-12 h-6 rounded-full bg-[var(--surface-hover)] animate-pulse" />
+                <div className="w-12 h-6 rounded-full bg-[var(--surface-hover)] animate-pulse" />
             </div>
-            <style>{`@keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }`}</style>
         </div>
     );
 }
@@ -44,14 +42,13 @@ export default function PostFeed({ communityId = null, sort = 'hot' }) {
 
     if (error) {
         return (
-            <div className="reddit-card" style={{ padding: '32px', textAlign: 'center', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
-                <div style={{ fontWeight: 800, color: 'white', fontSize: '18px', fontFamily: 'Outfit, sans-serif' }}>Connection Interrupted</div>
-                <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px', lineHeight: 1.5 }}>{error}</div>
+            <div className="premium-card p-8 text-center border border-[var(--border-color)] flex flex-col items-center gap-3">
+                <div className="text-3xl text-[var(--rejected-color)]">⚠️</div>
+                <h3 className="font-brand font-bold text-md text-[var(--text-primary)]">Connection Interrupted</h3>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed max-w-xs">{error}</p>
                 <button 
                   onClick={() => loadPosts(true)} 
-                  className="btn-dhruvit" 
-                  style={{ marginTop: '20px', padding: '10px 24px' }}
+                  className="btn-premium text-xs mt-3 py-2 px-6"
                 >
                     Retry Connection
                 </button>
@@ -61,15 +58,13 @@ export default function PostFeed({ communityId = null, sort = 'hot' }) {
 
     if (!loading && posts.length === 0) {
         return (
-            <div className="reddit-card" style={{ padding: '64px 32px', textAlign: 'center', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: '48px', marginBottom: '20px' }}>🌵</div>
-                <h3 style={{ fontSize: '22px', fontWeight: 800, color: 'white', marginBottom: '8px', fontFamily: 'Outfit, sans-serif' }}>
-                    Tumbleweeds...
-                </h3>
-                <p style={{ fontSize: '15px', color: 'var(--text-muted)', marginBottom: '24px', maxWidth: '300px', margin: '0 auto' }}>
+            <div className="premium-card p-16 text-center border border-[var(--border-color)] flex flex-col items-center gap-4">
+                <div className="text-4xl">🌵</div>
+                <h3 className="font-brand font-bold text-lg text-[var(--text-primary)]">Tumbleweeds...</h3>
+                <p className="text-xs text-[var(--text-secondary)] max-w-xs leading-relaxed">
                     This human space is quiet. Be the first to start a conversation.
                 </p>
-                <button className="btn-dhruvit" style={{ padding: '12px 28px' }}>Create First Post</button>
+                <button className="btn-premium text-xs mt-2 py-2 px-6">Create First Post</button>
             </div>
         );
     }

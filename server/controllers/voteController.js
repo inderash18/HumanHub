@@ -2,6 +2,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import Vote from '../models/Vote.js';
 import Post from '../models/Post.js';
 import Comment from '../models/Comment.js';
+import { createNotification } from './notificationController.js';
 
 // @desc    Vote on post or comment
 // @route   POST /api/:type/:id/vote
@@ -58,6 +59,17 @@ export const handleVote = asyncHandler(async (req, res) => {
 
   target.upvotes += upDiff;
   target.downvotes += downDiff;
+
+  // Dispatch notification for like/upvote
+  if (value === 1 && upDiff === 1) {
+    await createNotification({
+      recipient: target.author,
+      sender: req.user._id,
+      type: 'like',
+      postId: type === 'post' ? target._id : target.post,
+      body: `@${req.user.username} upvoted your ${type}.`
+    });
+  }
 
   // Recalculate HotScore if Post
   if (type === 'post') {

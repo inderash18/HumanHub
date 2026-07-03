@@ -47,7 +47,17 @@ const userSchema = new mongoose.Schema({
     type: String,
     maxlength: 200,
     default: ''
-  }
+  },
+  followers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: []
+  }],
+  following: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: []
+  }]
 }, { timestamps: true });
 
 export default mongoose.model('User', userSchema);

@@ -4,47 +4,60 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Reddit-exact color palette (dark mode)
-        brand: {
-          gold: '#ffd635',
-          muted: '#818384',
-          success: '#46d160',
-          danger: '#ff4500',
-          blue: '#0079d3',
+        ig: {
+          bg: '#000000',
+          elevated: '#121212',
+          surface: '#262626',
+          hover: '#1a1a1a',
+          border: '#262626',
+          'light-bg': '#ffffff',
+          'light-elevated': '#fafafa',
+          'light-surface': '#efefef',
+          'light-border': '#dbdbdb',
+          'text-primary': '#f5f5f5',
+          'text-secondary': '#a8a8a8',
+          'text-muted': '#737373',
+          'light-text-primary': '#000000',
+          'light-text-secondary': '#737373',
+          blue: '#0095f6',
+          'blue-hover': '#1877f2',
+          red: '#ed4956',
+          'heart-red': '#ff3040',
+          story: '#e1306c',
         },
-        reddit: {
-          bg: '#dae0e6',          // Reddit light bg
-          'dark-bg': '#1a1a1b',   // Reddit dark bg
-          'dark-surface': '#272729', // Reddit dark card bg
-          'dark-elevated': '#1a1a1b',
-          'dark-border': '#343536',
-          'dark-muted': '#818384',
-          orange: '#ff4500',       // Reddit orange
-          'orange-hover': '#e03d00',
-          blue: '#0079d3',         // Reddit blue
-          'blue-hover': '#006cbf',
-          upvote: '#ff4500',
-          downvote: '#7193ff',
-          text: '#d7dadc',
-          'text-dim': '#818384',
+        brand: {
+          verified: '#0095f6',
+          gold: '#ffd635',
+          success: '#00ba7c',
+          danger: '#ed4956',
         }
       },
-
       fontFamily: {
-        ibm: ['"IBM Plex Sans"', 'sans-serif'],
-        noto: ['"Noto Sans"', 'sans-serif'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+        brand: ['"Outfit"', '"Grand Hotel"', 'cursive', 'sans-serif'],
       },
       animation: {
-        'vote-pop': 'vote-pop 0.15s ease-out',
+        'like-heart': 'likeHeart 0.8s ease-in-out forwards',
+        'fade-in': 'fadeIn 0.2s ease-in-out',
+        'story-pulse': 'storyPulse 2s infinite',
       },
       keyframes: {
-        'vote-pop': {
-          '0%': { transform: 'scale(1)' },
-          '50%': { transform: 'scale(1.3)' },
-          '100%': { transform: 'scale(1)' },
+        likeHeart: {
+          '0%': { transform: 'scale(0)', opacity: '0' },
+          '50%': { transform: 'scale(1.2)', opacity: '1' },
+          '100%': { transform: 'scale(1)', opacity: '0' },
+        },
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'scale(0.98)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        storyPulse: {
+          '0%, 100%': { transform: 'scale(1)' },
+          '50%': { transform: 'scale(1.04)' },
         }
       }
     },

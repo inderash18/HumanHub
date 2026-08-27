@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   nginx:
     image: nginx:alpine
@@ -36,7 +34,7 @@ services:
     environment:
       - PORT=5000
       - BACKEND_URL=http://localhost/api
-      - MONGODB_URI=mongodb+srv://inderash18_db_user:mongodb10@cluster0.zrs1ebj.mongodb.net/humanhub?retryWrites=true&w=majority
+      - MONGODB_URI=mongodb+srv://inderash:inderash103@cluster0.19jmsn6.mongodb.net/humanhub?retryWrites=true&w=majority&appName=Cluster0
       - PG_URI=postgresql://postgres:postgres@postgres:5432/humanhub
       - REDIS_URL=redis://redis:6379
       - FRONTEND_URL=http://localhost

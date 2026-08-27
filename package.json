@@ -1,0 +1,31 @@
+{
+  "name": "humanhub-workspace",
+  "version": "1.0.0",
+  "description": "HumanHub - Human-Only Social Platform with AI Detection Pipeline",
+  "private": true,
+  "scripts": {
+    "dev:client": "npm --prefix client run dev",
+    "dev:server": "npm --prefix server run dev",
+    "dev:ai": "cd ai_services && uvicorn main:app --host 0.0.0.0 --port 8000 --reload",
+    "build:client": "npm --prefix client run build",
+    "install:all": "npm install --prefix client && npm install --prefix server",
+    "db:clear": "npm --prefix server run db:clear",
+    "seed": "npm --prefix server run seed",
+    "debug:db": "npm --prefix server run debug:db",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:unified": "docker compose -f docker-compose.unified.yml up --build -d",
+    "docker:logs": "docker compose logs -f"
+  },
+  "keywords": [
+    "humanhub",
+    "proof-of-humanity",
+    "social-platform",
+    "ai-detection",
+    "react",
+    "express",
+    "fastapi"
+  ],
+  "author": "Inderash",
+  "license": "MIT"
+}

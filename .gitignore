@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+*/node_modules/
+package-lock.json.bak
+
+# Python Virtual Environments & Caches
+venv/
+.venv/
+env/
+__pycache__/
+*/__pycache__/
+*/**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Build & Output
+dist/
+build/
+*.log
+*_log.txt
+*_output.txt
+
+# Local uploads & Temporary files
+uploads/*
+!uploads/.gitkeep
+server/uploads/*
+!server/uploads/.gitkeep
+tmp/
+temp/
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+
+# IDE & OS Metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace

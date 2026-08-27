@@ -6,7 +6,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "db:clear": "node scripts/clearDatabase.js",
+    "seed": "node scripts/seedCommunities.js",
+    "debug:db": "node scripts/debugDb.js"
   },
   "dependencies": {
     "axios": "^1.13.6",

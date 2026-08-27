@@ -7,7 +7,7 @@ import bcrypt from 'bcryptjs';
 // @route   POST /api/auth/register
 // @access  Public
 export const registerUser = asyncHandler(async (req, res) => {
-  const { username, email, password } = req.body;
+  const { username, email, password, bio } = req.body;
 
   const userExists = await User.findOne({ $or: [{ email }, { username }] });
   if (userExists) {
@@ -21,17 +21,38 @@ export const registerUser = asyncHandler(async (req, res) => {
   const user = await User.create({
     username,
     email,
-    passwordHash
+    passwordHash,
+    bio: bio || 'Verified human creator on HumanHub.',
+    trustScore: 1.0,
+    emailVerified: true
   });
 
   if (user) {
-    res.status(201).json({
+    const token = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    const userObj = {
       _id: user._id,
       username: user.username,
       email: user.email,
       role: user.role,
       trustScore: user.trustScore,
-      message: 'User registered successfully. Please verify your email.'
+      avatar: user.avatar,
+      bio: user.bio
+    };
+
+    res.status(201).json({
+      user: userObj,
+      token,
+      ...userObj,
+      message: 'User registered successfully.'
     });
   } else {
     res.status(400);
@@ -43,12 +64,22 @@ export const registerUser = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/login
 // @access  Public
 export const loginUser = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
+  const { email, username, password } = req.body;
+  const identifier = email || username;
 
-  const user = await User.findOne({ email });
+  if (!identifier || !password) {
+    res.status(400);
+    throw new Error('Please provide email/username and password');
+  }
+
+  const user = await User.findOne({
+    $or: [
+      { email: identifier.toLowerCase() },
+      { username: identifier.toLowerCase() }
+    ]
+  });
 
   if (user && (await bcrypt.compare(password, user.passwordHash))) {
-    
     if (user.isBanned) {
       res.status(403);
       throw new Error('Your account has been banned due to policy violations.');
@@ -57,25 +88,31 @@ export const loginUser = asyncHandler(async (req, res) => {
     const token = generateToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
-    // Set refresh token in HttpOnly cookie
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
-    res.json({
+    const userObj = {
       _id: user._id,
       username: user.username,
       email: user.email,
       role: user.role,
       trustScore: user.trustScore,
-      token
+      avatar: user.avatar,
+      bio: user.bio
+    };
+
+    res.json({
+      user: userObj,
+      token,
+      ...userObj
     });
   } else {
     res.status(401);
-    throw new Error('Invalid email or password');
+    throw new Error('Invalid username/email or password');
   }
 });
 

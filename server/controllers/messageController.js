@@ -53,6 +53,9 @@ export const getMessages = asyncHandler(async (req, res) => {
 // @route   GET /api/messages/conversations/active
 // @access  Private
 export const getConversations = asyncHandler(async (req, res) => {
+  if (!req.user) {
+    return res.json([]);
+  }
   const currentUserId = req.user._id;
 
   // Find all messages involving the current user

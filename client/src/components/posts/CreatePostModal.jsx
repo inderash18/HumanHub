@@ -39,10 +39,13 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
     const file = e.target.files[0];
     if (!file) return;
 
-    const previewUrl = URL.createObjectURL(file);
     setMediaFile(file);
-    setMediaPreview(previewUrl);
-    setStep(2);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setMediaPreview(reader.result);
+      setStep(2);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleNextToCaption = () => {
@@ -62,7 +65,7 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
         isAI: false,
         confidence: 0.98
       });
-    }, 1200);
+    }, 1000);
   };
 
   const handleSubmitPost = async () => {
@@ -73,20 +76,34 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
 
     try {
       setIsPosting(true);
-      let uploadedMediaUrl = mediaPreview;
+      let finalMediaUrls = [];
 
-      // If file uploaded, upload to backend or use data URL
-      const formData = new FormData();
+      // 1. If physical file exists, upload to /posts/upload or use mediaPreview data URL
       if (mediaFile) {
-        formData.append('images', mediaFile);
+        try {
+          const formData = new FormData();
+          formData.append('images', mediaFile);
+          const uploadRes = await api.post('/posts/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          if (uploadRes.data?.urls && uploadRes.data.urls.length > 0) {
+            finalMediaUrls = uploadRes.data.urls;
+          } else {
+            finalMediaUrls = [mediaPreview];
+          }
+        } catch (uploadErr) {
+          // Fallback to data URL
+          finalMediaUrls = mediaPreview ? [mediaPreview] : [];
+        }
+      } else if (mediaPreview) {
+        finalMediaUrls = [mediaPreview];
       }
 
-      // Default community lookup/fallback
+      // 2. Submit post
       const postPayload = {
-        title: title.trim() || caption.slice(0, 50) || 'Verified Human Post',
+        title: title.trim() || caption.slice(0, 60) || 'Verified Human Post',
         body: caption.trim(),
-        mediaUrls: uploadedMediaUrl ? [uploadedMediaUrl] : [],
-        communityId: '65f4268e0f1a2c001f000001' // Technology or General
+        mediaUrls: finalMediaUrls
       };
 
       await api.post('/posts', postPayload);
@@ -94,9 +111,8 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
       if (onPostCreated) onPostCreated();
       onClose();
     } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.message || 'Post submitted to moderation queue');
-      onClose();
+      console.error('[Post Error]', err);
+      toast.error(err.response?.data?.message || 'Failed to publish post');
     } finally {
       setIsPosting(false);
     }

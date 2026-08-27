@@ -19,9 +19,13 @@ export const protect = asyncHandler(async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret_key_123');
     req.user = await User.findById(decoded.id).select('-passwordHash');
+    if (!req.user) {
+      res.status(401);
+      throw new Error('User account no longer exists. Please sign up or log in again.');
+    }
     next();
   } catch (error) {
     res.status(401);
-    throw new Error('Not authorized. Token failed or expired.');
+    throw new Error(error.message || 'Not authorized. Token failed or expired.');
   }
 });

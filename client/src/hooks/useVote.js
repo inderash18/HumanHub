@@ -1,10 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../services/api.js';
 
-export const useVote = (initialScore, targetId, targetType = 'post') => {
+export const useVote = (initialScore = 0, targetId, targetType = 'post', initialStatus = 0) => {
     const [score, setScore] = useState(initialScore);
-    const [status, setStatus] = useState(0); // 1 = upvote, -1 = downvote, 0 = none
+    const [status, setStatus] = useState(initialStatus); // 1 = upvote, -1 = downvote, 0 = none
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        setScore(initialScore);
+        setStatus(initialStatus);
+    }, [initialScore, initialStatus]);
 
     const handleVote = async (value) => {
         if (loading) return; // Debounce clicks safely

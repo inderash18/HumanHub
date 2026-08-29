@@ -1,5 +1,5 @@
 import express from 'express';
-import { sendMessage, getMessages, getConversations } from '../controllers/messageController.js';
+import { sendMessage, getMessages, getConversations, getUnreadMessagesCount } from '../controllers/messageController.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -7,8 +7,10 @@ const router = express.Router();
 router.use(protect);
 
 router.post('/', sendMessage);
+router.get('/unread-count', getUnreadMessagesCount);
 router.get('/conversations', getConversations);
 router.get('/conversations/active', getConversations);
 router.get('/:userId', getMessages);
 
 export default router;
+

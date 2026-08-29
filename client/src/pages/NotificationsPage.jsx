@@ -1,15 +1,39 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { IoHeart, IoPersonAdd, IoShieldCheckmark, IoChatbubble } from 'react-icons/io5';
-import { MdVerified } from 'react-icons/md';
+import { useNavigate } from 'react-router-dom';
+import { 
+  Bell, 
+  Heart, 
+  MessageSquare, 
+  UserPlus, 
+  CheckCheck
+} from 'lucide-react';
 import api from '../services/api';
+import { toast } from 'react-hot-toast';
+import UserAvatar from '../components/common/UserAvatar';
+import Button from '../components/ui/Button';
+import EmptyState from '../components/ui/EmptyState';
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchNotifications();
+  }, []);
+
+  // Real-time notification updates
+  useEffect(() => {
+    const handleNewNotif = (e) => {
+      const data = e.detail;
+      if (data?.notification) {
+        setNotifications((prev) => [data.notification, ...prev]);
+      } else {
+        fetchNotifications();
+      }
+    };
+    window.addEventListener('notification:new:event', handleNewNotif);
+    return () => window.removeEventListener('notification:new:event', handleNewNotif);
   }, []);
 
   const fetchNotifications = async () => {
@@ -24,60 +48,112 @@ export default function NotificationsPage() {
     }
   };
 
-  return (
-    <div className="w-full max-w-[600px] mx-auto px-4 py-8 select-none">
-      <h2 className="text-2xl font-bold text-white mb-6">Notifications</h2>
+  const handleMarkAllRead = async () => {
+    try {
+      await api.post('/notifications/read-all');
+      setNotifications((prev) => prev.map(n => ({ ...n, isRead: true })));
+      toast.success('All notifications marked as read ✨');
+    } catch (err) {
+      toast.error('Failed to mark notifications as read');
+    }
+  };
 
-      <div className="flex flex-col gap-3">
-        {/* System Proof-of-Humanity Alert */}
-        <div className="p-4 bg-[#121212] border border-[#262626] rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#00ba7c]/10 text-[#00ba7c] flex items-center justify-center text-xl">
-              <IoShieldCheckmark />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-white">Proof of Humanity Active</p>
-              <p className="text-xs text-[#737373]">Your account is verified as an authentic human contributor.</p>
-            </div>
+  const formatTimestamp = (dateStr) => {
+    if (!dateStr) return 'Just now';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffSecs = Math.floor((now - date) / 1000);
+    if (diffSecs < 60) return `${diffSecs}s ago`;
+    const diffMins = Math.floor(diffSecs / 60);
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  };
+
+  return (
+    <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-8 select-none">
+      {/* Header */}
+      <div className="flex items-center justify-between pb-6 mb-6 border-b border-hub-border">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-hub-surface-elevated border border-hub-border flex items-center justify-center text-hub-accent text-xl shadow-md">
+            <Bell className="w-5 h-5" />
           </div>
-          <span className="text-xs text-[#00ba7c] font-bold">100%</span>
+          <div>
+            <h1 className="font-display text-xl sm:text-2xl font-bold text-hub-text-primary">Notifications</h1>
+            <p className="text-xs text-hub-text-tertiary">Stay updated with your likes, comments, and new followers.</p>
+          </div>
         </div>
 
-        {notifications.length > 0 ? (
+        {notifications.some(n => !n.isRead) && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleMarkAllRead}
+            icon={CheckCheck}
+          >
+            Mark all read
+          </Button>
+        )}
+      </div>
+
+      {/* Notifications List */}
+      <div className="space-y-3">
+        {loading ? (
+          <div className="py-16 text-center text-xs text-hub-text-tertiary">
+            Loading notifications...
+          </div>
+        ) : notifications.length > 0 ? (
           notifications.map((n) => (
-            <div key={n._id} className="p-3 hover:bg-[#121212] rounded-xl flex items-center justify-between transition-colors">
-              <div className="flex items-center gap-3">
-                <img 
-                  src={n.sender?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} 
-                  alt="avatar" 
-                  className="w-10 h-10 rounded-full object-cover"
-                />
-                <div>
-                  <p className="text-sm text-[#f5f5f5]">
-                    <span className="font-semibold text-white">{n.sender?.username || 'member'}</span>{' '}
-                    {n.type === 'like' && 'liked your post.'}
-                    {n.type === 'comment' && 'commented on your photo.'}
-                    {n.type === 'follow' && 'started following you.'}
+            <div 
+              key={n._id} 
+              onClick={() => {
+                if (n.postId) navigate(`/p/${n.postId}`);
+                else if (n.sender?.username) navigate(`/u/${n.sender.username}`);
+              }}
+              className={`p-3.5 rounded-2xl border transition-colors cursor-pointer flex items-center justify-between ${
+                n.isRead 
+                  ? 'bg-hub-surface border-hub-border hover:bg-hub-surface-elevated' 
+                  : 'bg-hub-surface-elevated border-hub-accent/40 hover:border-hub-accent shadow-sm'
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="relative flex-shrink-0">
+                  <UserAvatar 
+                    src={n.sender?.avatar} 
+                    name={n.sender?.displayName || n.sender?.username} 
+                    size="sm"
+                  />
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-hub-surface border border-hub-border flex items-center justify-center text-[10px]">
+                    {n.type === 'like' && <Heart className="w-2.5 h-2.5 text-hub-accent fill-current" />}
+                    {n.type === 'comment' && <MessageSquare className="w-2.5 h-2.5 text-hub-violet" />}
+                    {n.type === 'follow' && <UserPlus className="w-2.5 h-2.5 text-hub-cyan" />}
+                  </div>
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs text-hub-text-primary leading-snug">
+                    <span className="font-bold text-hub-text-primary">{n.sender?.displayName || n.sender?.username || 'someone'}</span>{' '}
+                    <span className="text-hub-text-secondary">{n.body || 'interacted with your post.'}</span>
                   </p>
-                  <span className="text-xs text-[#737373]">2h</span>
+                  <span className="text-[10px] text-hub-text-tertiary mt-0.5 block">
+                    {formatTimestamp(n.createdAt)}
+                  </span>
                 </div>
               </div>
 
-              {n.type === 'follow' ? (
-                <button className="bg-[#0095f6] hover:bg-[#1877f2] text-white px-4 py-1.5 rounded-lg text-xs font-semibold">
-                  Follow Back
-                </button>
-              ) : (
-                <div className="w-10 h-10 bg-[#262626] rounded-md overflow-hidden flex items-center justify-center">
-                  <IoHeart className="text-[#ff3040]" />
-                </div>
+              {!n.isRead && (
+                <span className="w-2 h-2 rounded-full bg-hub-accent flex-shrink-0" />
               )}
             </div>
           ))
         ) : (
-          <div className="text-center py-16 text-[#737373]">
-            <p className="text-sm">No new notifications</p>
-          </div>
+          <EmptyState
+            icon={Bell}
+            title="No notifications yet"
+            description="When someone likes your posts, comments, or follows you, you'll see it here."
+          />
         )}
       </div>
     </div>

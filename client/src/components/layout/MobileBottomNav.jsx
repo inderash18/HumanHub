@@ -1,43 +1,85 @@
 import React, { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  IoHomeOutline, IoHome, 
-  IoCompassOutline, IoCompass,
-  IoPaperPlaneOutline, IoPaperPlane,
-  IoHeartOutline, IoHeart 
-} from 'react-icons/io5';
-import { BsPlusSquare, BsPlusSquareFill, BsCameraReels, BsCameraReelsFill } from 'react-icons/bs';
+  Activity, 
+  Compass, 
+  Users, 
+  Bell, 
+  Plus
+} from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import CreatePostModal from '../posts/CreatePostModal';
+import UserAvatar from '../common/UserAvatar';
 
 export default function MobileBottomNav() {
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   return (
     <>
-      <div className="md:hidden fixed bottom-0 left-0 right-0 h-[50px] bg-black border-t border-[#262626] z-40 flex items-center justify-around px-4">
-        <NavLink to="/" className="text-2xl text-white">
-          {location.pathname === '/' ? <IoHome /> : <IoHomeOutline />}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 h-14 bg-hub-surface border-t border-hub-border z-40 flex items-center justify-around px-2 shadow-2xl">
+        <NavLink 
+          to={isAuthenticated ? '/feed' : '/'} 
+          className={`p-2 rounded-xl transition-colors ${
+            location.pathname === '/' || location.pathname === '/feed' ? 'text-hub-accent font-bold' : 'text-hub-text-tertiary'
+          }`}
+          title="Feed"
+        >
+          <Activity className="w-5 h-5" />
         </NavLink>
-        <NavLink to="/explore" className="text-2xl text-white">
-          {location.pathname === '/explore' ? <IoCompass /> : <IoCompassOutline />}
+
+        <NavLink 
+          to="/explore" 
+          className={`p-2 rounded-xl transition-colors ${
+            location.pathname === '/explore' ? 'text-hub-accent font-bold' : 'text-hub-text-tertiary'
+          }`}
+          title="Discover"
+        >
+          <Compass className="w-5 h-5" />
         </NavLink>
-        <NavLink to="/reels" className="text-2xl text-white">
-          {location.pathname === '/reels' ? <BsCameraReelsFill /> : <BsCameraReels />}
-        </NavLink>
-        <button onClick={() => setIsCreateOpen(true)} className="text-2xl text-white">
-          <BsPlusSquare />
+
+        <button 
+          onClick={() => {
+            if (!isAuthenticated) navigate('/login');
+            else setIsCreateOpen(true);
+          }} 
+          className="p-2 rounded-xl bg-hub-accent text-white shadow-md active:scale-95 transition-transform"
+          title="Create Post"
+        >
+          <Plus className="w-5 h-5" />
         </button>
-        <NavLink to="/messages" className="text-2xl text-white">
-          {location.pathname === '/messages' ? <IoPaperPlane /> : <IoPaperPlaneOutline />}
+
+        <NavLink 
+          to="/communities" 
+          className={`p-2 rounded-xl transition-colors ${
+            location.pathname === '/communities' ? 'text-hub-accent font-bold' : 'text-hub-text-tertiary'
+          }`}
+          title="Communities"
+        >
+          <Users className="w-5 h-5" />
         </NavLink>
-        <NavLink to={user ? `/u/${user.username}` : '/login'} className="w-6 h-6 rounded-full overflow-hidden border border-[#262626]">
-          <img 
-            src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} 
-            alt="profile" 
-            className="w-full h-full object-cover"
+
+        <NavLink 
+          to="/notifications" 
+          className={`p-2 rounded-xl transition-colors ${
+            location.pathname === '/notifications' ? 'text-hub-accent font-bold' : 'text-hub-text-tertiary'
+          }`}
+          title="Notifications"
+        >
+          <Bell className="w-5 h-5" />
+        </NavLink>
+
+        <NavLink 
+          to={user ? `/u/${user.username}` : '/login'} 
+          className="p-1 flex items-center justify-center"
+          title="My Profile"
+        >
+          <UserAvatar 
+            src={user?.avatar} 
+            name={user?.displayName || user?.username} 
+            size="xs"
           />
         </NavLink>
       </div>

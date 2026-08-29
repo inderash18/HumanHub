@@ -77,7 +77,7 @@ export default function OnboardingPage() {
                 bio: res.data.bio,
                 avatar: res.data.avatar
             });
-            toast.success("Welcome aboard, verified human!");
+            toast.success("Welcome to HumanHub! ✨");
             navigate('/feed');
         } catch (err) {
             console.error(err);

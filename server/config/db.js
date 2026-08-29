@@ -1,29 +1,15 @@
 import mongoose from 'mongoose';
 import Community from '../models/Community.js';
-import User from '../models/User.js';
 
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/humanhub');
     console.log(`[MongoDB] Connected: ${conn.connection.host}`);
 
-    // Auto-seed communities if empty
+    // Ensure default communities exist without creating fake/bot users
     const communityCount = await Community.countDocuments();
     if (communityCount === 0) {
-      console.log('[Seed] No communities found. Initializing defaults...');
-      
-      // Ensure we have a system user/creator
-      let systemUser = await User.findOne({ username: 'dhruvit_system' });
-      if (!systemUser) {
-        systemUser = await User.create({
-          username: 'dhruvit_system',
-          email: 'system@dhruvit.com',
-          passwordHash: '$2a$10$mw.9G7I/8LhQ0I/8LhQ0I/8LhQ0I/8LhQ0I/8LhQ0I/8LhQ0I/8Lh', // hashed 'password123'
-          trustScore: 1.0,
-          role: 'admin'
-        });
-      }
-
+      console.log('[Setup] Initializing default community topics...');
       const defaults = [
         { name: 'Technology', slug: 'technology', description: 'Future human innovations and ethical tech.' },
         { name: 'Science', slug: 'science', description: 'Human exploration of the physical universe.' },
@@ -34,12 +20,9 @@ const connectDB = async () => {
 
       await Community.insertMany(defaults.map(c => ({
         ...c,
-        creator: systemUser._id,
-        moderators: [systemUser._id],
         rules: ['Be human.', 'No bot spam.', 'Respect authentic ideas.']
       })));
-      
-      console.log('[Seed] Default communities created successfully.');
+      console.log('[Setup] Default community topics initialized.');
     }
 
   } catch (error) {

@@ -1,25 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { votePost } from '../../services/postService';
 import toast from 'react-hot-toast';
 
-export default function VoteButton({ initialScore = 0, targetId, targetType, horizontal = false }) {
+export default function VoteButton({ initialScore = 0, initialVote = null, targetId, targetType, horizontal = false }) {
+    const parseInitialVote = (v) => {
+        if (v === 1 || v === 'up') return 'up';
+        if (v === -1 || v === 'down') return 'down';
+        return null;
+    };
+
     const [score, setScore] = useState(initialScore);
-    const [voted, setVoted] = useState(null); // 'up' | 'down' | null
+    const [voted, setVoted] = useState(parseInitialVote(initialVote));
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        setScore(initialScore);
+        setVoted(parseInitialVote(initialVote));
+    }, [initialScore, initialVote]);
 
     const handleVote = async (dir) => {
         if (loading) return;
         setLoading(true);
         try {
-            await votePost(targetId, dir);
+            const val = dir === voted ? 0 : (dir === 'up' ? 1 : -1);
+            await votePost(targetId, val);
             // Toggle or change vote
             if (voted === dir) {
                 setVoted(null);
-                setScore(voted === 'up' ? score - 1 : score + 1);
+                setScore(voted === 'up' ? Math.max(0, score - 1) : score + 1);
             } else {
                 const diff = voted ? (dir === 'up' ? 2 : -2) : (dir === 'up' ? 1 : -1);
                 setVoted(dir);
-                setScore(score + diff);
+                setScore(Math.max(0, score + diff));
             }
         } catch (err) {
             toast.error("Cloud connection required for persistent voting.");

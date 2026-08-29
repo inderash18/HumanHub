@@ -1,151 +1,220 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { IoShieldCheckmark, IoAddCircleOutline } from 'react-icons/io5';
-import { MdVerified } from 'react-icons/md';
-import StoriesTray from '../components/home/StoriesTray';
+import { Link, useNavigate } from 'react-router-dom';
+import { 
+  Plus, 
+  UserPlus, 
+  Users, 
+  ArrowRight, 
+  MessageSquare
+} from 'lucide-react';
 import PostCard from '../components/posts/PostCard';
 import CreatePostModal from '../components/posts/CreatePostModal';
+import UserAvatar from '../components/common/UserAvatar';
+import Button from '../components/ui/Button';
+import EmptyState from '../components/ui/EmptyState';
+import { PostCardSkeleton } from '../components/ui/LoadingSkeleton';
 import { useAuthStore } from '../store/useAuthStore';
 import api from '../services/api';
+import { toast } from 'react-hot-toast';
 
 export default function FeedPage() {
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
+  const navigate = useNavigate();
+
   const [posts, setPosts] = useState([]);
+  const [suggestedUsers, setSuggestedUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   useEffect(() => {
     fetchFeed();
-  }, []);
+    if (isAuthenticated) {
+      fetchSuggestedUsers();
+    }
+  }, [isAuthenticated]);
 
   const fetchFeed = async () => {
     try {
       setLoading(true);
       const res = await api.get('/posts');
-      setPosts(res.data?.data || res.data || []);
+      const data = res.data?.data || res.data || [];
+      setPosts(data);
     } catch (err) {
-      console.log('Feed fetched with empty response');
       setPosts([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchSuggestedUsers = async () => {
+    try {
+      const res = await api.get('/users/suggested/list');
+      setSuggestedUsers(res.data || []);
+    } catch (err) {
+      setSuggestedUsers([]);
+    }
+  };
+
+  const handleFollowSuggested = async (targetId) => {
+    try {
+      const res = await api.post(`/users/${targetId}/follow`);
+      toast.success(res.data.isFollowing ? 'Following!' : 'Unfollowed');
+      fetchSuggestedUsers();
+    } catch (err) {
+      toast.error('Failed to update follow');
+    }
+  };
+
   return (
-    <div className="w-full max-w-[935px] mx-auto px-4 py-4 flex justify-center gap-16">
-      {/* Central Main Feed */}
-      <div className="w-full max-w-[630px] flex flex-col gap-4">
-        {/* Stories Tray */}
-        <StoriesTray />
-
-        {/* Loading Skeletons */}
-        {loading && (
-          <div className="flex flex-col gap-6 mt-4">
-            {[1, 2].map((n) => (
-              <div key={n} className="w-full max-w-[470px] mx-auto flex flex-col gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#262626] animate-pulse" />
-                  <div className="w-24 h-3 bg-[#262626] rounded animate-pulse" />
-                </div>
-                <div className="w-full aspect-square bg-[#1a1a1a] rounded-md animate-pulse" />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Posts Stream */}
-        {!loading && posts.length > 0 && (
-          <div className="flex flex-col gap-2 mt-2">
-            {posts.map((post) => (
-              <PostCard 
-                key={post._id} 
-                post={post} 
-                onUpdate={fetchFeed} 
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!loading && posts.length === 0 && (
-          <div className="w-full max-w-[470px] mx-auto p-12 text-center bg-[#121212] border border-[#262626] rounded-2xl flex flex-col items-center mt-6">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] flex items-center justify-center text-white mb-4 shadow-lg shadow-pink-500/20">
-              <IoShieldCheckmark className="text-3xl" />
-            </div>
-            <h3 className="text-lg font-bold text-white mb-1">Welcome to HumanHub</h3>
-            <p className="text-xs text-[#a8a8a8] max-w-xs mb-6">
-              Your feed is currently fresh. Be the first verified human to create a post or share a story!
-            </p>
-            <button
+    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 select-none">
+      <div className="flex flex-col lg:flex-row justify-center gap-8">
+        
+        {/* Central Feed Column */}
+        <div className="flex-1 max-w-[620px] flex flex-col gap-4">
+          {/* Quick Composer Box */}
+          {isAuthenticated && user && (
+            <div 
               onClick={() => setIsCreateOpen(true)}
-              className="bg-[#0095f6] hover:bg-[#1877f2] text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-500/20 flex items-center gap-2"
+              className="p-4 rounded-3xl bg-hub-surface border border-hub-border hover:border-hub-border-light cursor-pointer transition-all flex items-center gap-3.5 shadow-xl group"
             >
-              <IoAddCircleOutline className="text-lg" />
-              Create First Post
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Right Desktop Suggestions Sidebar */}
-      <div className="hidden lg:flex flex-col w-[320px] pt-4 gap-5 select-none">
-        {/* User Card */}
-        {user ? (
-          <div className="flex items-center justify-between">
-            <Link to={`/u/${user.username}`} className="flex items-center gap-3 group">
-              <img 
-                src={user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} 
-                alt={user.username} 
-                className="w-11 h-11 rounded-full object-cover border border-[#262626]"
+              <UserAvatar 
+                src={user.avatar} 
+                name={user.displayName || user.username} 
+                size="sm"
               />
-              <div>
-                <p className="text-sm font-semibold text-white flex items-center gap-1 group-hover:opacity-80">
-                  {user.username}
-                  <MdVerified className="text-[#0095f6] text-xs" />
-                </p>
-                <p className="text-xs text-[#737373]">{user.email}</p>
+              <div className="flex-1 px-4 py-2.5 rounded-2xl bg-hub-surface-elevated border border-hub-border text-xs text-hub-text-tertiary group-hover:text-hub-text-secondary transition-colors">
+                What's on your mind? Share a story, thought, or photo...
               </div>
-            </Link>
-            <button className="text-xs font-semibold text-[#0095f6] hover:text-white">
-              Switch
-            </button>
-          </div>
-        ) : (
-          <div className="p-4 rounded-xl bg-[#121212] border border-[#262626] text-center">
-            <p className="text-xs font-semibold text-white mb-2">Join HumanHub</p>
-            <p className="text-[11px] text-[#737373] mb-3">Proof of Humanity verified social experience</p>
-            <Link to="/login" className="block w-full bg-[#0095f6] text-white py-1.5 rounded-lg text-xs font-bold">
-              Log In
-            </Link>
-          </div>
-        )}
+              <div className="p-2 rounded-2xl bg-hub-accent text-white group-hover:opacity-90 transition-opacity">
+                <Plus className="w-4 h-4" />
+              </div>
+            </div>
+          )}
 
-        {/* Suggestions Header */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-[#a8a8a8]">Proof of Humanity Info</span>
-          <Link to="/verification-dashboard" className="text-xs font-semibold text-[#f5f5f5] hover:text-[#0095f6]">
-            Learn
-          </Link>
+          {/* Feed Posts List */}
+          {loading ? (
+            <div className="flex flex-col gap-4">
+              <PostCardSkeleton />
+              <PostCardSkeleton />
+            </div>
+          ) : posts.length > 0 ? (
+            <div className="flex flex-col gap-4">
+              {posts.map((post) => (
+                <PostCard 
+                  key={post._id} 
+                  post={post} 
+                  onUpdate={fetchFeed} 
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState 
+              icon={MessageSquare}
+              title="No Posts Yet"
+              description="Be the first to share a moment or start a conversation with the community."
+              actionLabel="Create First Post"
+              onAction={() => {
+                if (!isAuthenticated) navigate('/login');
+                else setIsCreateOpen(true);
+              }}
+            />
+          )}
         </div>
 
-        {/* Feature Cards */}
-        <div className="flex flex-col gap-3">
-          <div className="p-3 bg-[#121212] border border-[#262626] rounded-xl flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#00ba7c]/10 text-[#00ba7c] flex items-center justify-center flex-shrink-0 mt-0.5">
-              <IoShieldCheckmark className="text-lg" />
+        {/* Right Rail */}
+        <div className="hidden lg:flex flex-col w-[300px] gap-5 select-none flex-shrink-0">
+          {/* User Status Card */}
+          {isAuthenticated && user ? (
+            <div className="p-4 rounded-3xl bg-hub-surface border border-hub-border flex items-center justify-between shadow-xl">
+              <Link to={`/u/${user.username}`} className="flex items-center gap-3 min-w-0 group">
+                <UserAvatar 
+                  src={user.avatar} 
+                  name={user.displayName || user.username} 
+                  size="md"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-hub-text-primary truncate group-hover:underline">
+                    {user.displayName || user.username}
+                  </p>
+                  <p className="text-[11px] text-hub-text-tertiary truncate">@{user.username}</p>
+                </div>
+              </Link>
+              <Link to="/settings" className="text-xs font-semibold text-hub-text-tertiary hover:text-hub-text-primary">
+                Edit
+              </Link>
             </div>
-            <div>
-              <p className="text-xs font-semibold text-white">Bot-Free Guarantee</p>
-              <p className="text-[11px] text-[#737373] mt-0.5">
-                Multi-layer AI neural scoring ensures only authentic human voices are published.
-              </p>
+          ) : (
+            <div className="p-5 rounded-3xl bg-hub-surface border border-hub-border text-center shadow-xl space-y-3">
+              <h4 className="font-display text-sm font-bold text-hub-text-primary">Join HumanHub</h4>
+              <p className="text-xs text-hub-text-secondary">Connect with friends, discover vibrant communities, and share moments.</p>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => navigate('/register')}
+                className="w-full"
+              >
+                Sign Up & Join
+              </Button>
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Footer Meta */}
-        <div className="text-[11px] text-[#555555] leading-relaxed">
-          <p>© 2026 HumanHub • Proof of Humanity Network</p>
+          {/* Suggested Users */}
+          {suggestedUsers.length > 0 && (
+            <div className="p-5 rounded-3xl bg-hub-surface border border-hub-border shadow-xl flex flex-col gap-3.5">
+              <div className="flex items-center justify-between">
+                <h4 className="font-display text-xs font-bold text-hub-text-primary uppercase tracking-wider">
+                  People to Follow
+                </h4>
+                <Link to="/explore" className="text-[11px] text-hub-text-tertiary hover:text-hub-text-primary font-semibold">
+                  Explore All
+                </Link>
+              </div>
+
+              <div className="space-y-2.5">
+                {suggestedUsers.map((u) => (
+                  <div key={u._id} className="flex items-center justify-between gap-2">
+                    <Link to={`/u/${u.username}`} className="flex items-center gap-2.5 min-w-0 group">
+                      <UserAvatar 
+                        src={u.avatar} 
+                        name={u.displayName || u.username} 
+                        size="sm"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-hub-text-primary truncate group-hover:underline">
+                          {u.displayName || u.username}
+                        </p>
+                        <p className="text-[10px] text-hub-text-tertiary truncate">@{u.username}</p>
+                      </div>
+                    </Link>
+
+                    <button 
+                      onClick={() => handleFollowSuggested(u._id)}
+                      className="p-1.5 rounded-xl bg-hub-surface-elevated border border-hub-border hover:border-hub-accent text-hub-text-primary text-xs font-bold flex-shrink-0 transition-colors"
+                      title="Follow"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Community Highlights Card */}
+          <div className="p-5 rounded-3xl bg-hub-surface border border-hub-border flex flex-col gap-2.5 shadow-xl">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-hub-surface-elevated border border-hub-border flex items-center justify-center text-hub-violet">
+                <Users className="w-4 h-4" />
+              </div>
+              <span className="font-display text-xs font-bold text-hub-text-primary">Discover Communities</span>
+            </div>
+            <p className="text-[11px] text-hub-text-secondary leading-relaxed">
+              Find spaces that match your passions—photography, design, technology, stories, music, and everyday life.
+            </p>
+            <Link to="/communities" className="text-[11px] font-bold text-hub-accent hover:underline inline-flex items-center gap-1 mt-1">
+              Browse all communities <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
         </div>
       </div>
 

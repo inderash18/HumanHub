@@ -3,24 +3,25 @@ import mongoose from 'mongoose';
 const postSchema = new mongoose.Schema({
   title: {
     type: String,
-    required: true,
     trim: true,
-    maxlength: 300
+    maxlength: 300,
+    default: ''
   },
   body: {
     type: String,
     default: ''
   },
-
   author: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   community: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Community',
-    required: false
+    required: false,
+    index: true
   },
   mediaUrls: [{
     type: String
@@ -28,7 +29,8 @@ const postSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'published', 'rejected', 'removed'],
-    default: 'pending'
+    default: 'published',
+    index: true
   },
   upvotes: {
     type: Number,
@@ -70,5 +72,10 @@ const postSchema = new mongoose.Schema({
     default: 0
   }
 }, { timestamps: true });
+
+postSchema.index({ author: 1, createdAt: -1 });
+postSchema.index({ community: 1, createdAt: -1 });
+postSchema.index({ status: 1, hotScore: -1 });
+postSchema.index({ createdAt: -1 });
 
 export default mongoose.model('Post', postSchema);

@@ -8,59 +8,62 @@ export default {
   theme: {
     extend: {
       colors: {
-        ig: {
-          bg: '#000000',
-          elevated: '#121212',
-          surface: '#262626',
-          hover: '#1a1a1a',
-          border: '#262626',
-          'light-bg': '#ffffff',
-          'light-elevated': '#fafafa',
-          'light-surface': '#efefef',
-          'light-border': '#dbdbdb',
-          'text-primary': '#f5f5f5',
-          'text-secondary': '#a8a8a8',
-          'text-muted': '#737373',
-          'light-text-primary': '#000000',
-          'light-text-secondary': '#737373',
-          blue: '#0095f6',
-          'blue-hover': '#1877f2',
-          red: '#ed4956',
-          'heart-red': '#ff3040',
-          story: '#e1306c',
-        },
-        brand: {
-          verified: '#0095f6',
-          gold: '#ffd635',
-          success: '#00ba7c',
-          danger: '#ed4956',
+        hub: {
+          background: 'var(--background)',
+          surface: 'var(--surface)',
+          'surface-elevated': 'var(--surface-elevated)',
+          'surface-muted': 'var(--surface-muted)',
+          
+          border: 'var(--border)',
+          'border-subtle': 'var(--border-subtle)',
+          
+          'text-primary': 'var(--text-primary)',
+          'text-secondary': 'var(--text-secondary)',
+          'text-tertiary': 'var(--text-tertiary)',
+          
+          accent: 'var(--accent)',
+          'accent-hover': 'var(--accent-hover)',
+          
+          cyan: 'var(--cyan)',
+          violet: 'var(--violet)',
+          
+          success: 'var(--success)',
+          warning: 'var(--warning)',
+          danger: 'var(--danger)',
+          
+          'focus-ring': 'var(--focus-ring)',
+
+          // Aliases for semantic mapping
+          bg: 'var(--background)',
+          card: 'var(--surface)',
+          'card-hover': 'var(--surface-elevated)',
+          'text-muted': 'var(--text-tertiary)',
+          trust: 'var(--accent)',
+          'trust-soft': 'rgba(240, 110, 92, 0.15)',
+          community: 'var(--violet)',
+          'community-soft': 'rgba(139, 124, 246, 0.15)',
         }
       },
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
-        brand: ['"Outfit"', '"Grand Hotel"', 'cursive', 'sans-serif'],
+        sans: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+        display: ['"Outfit"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
       },
       animation: {
-        'like-heart': 'likeHeart 0.8s ease-in-out forwards',
-        'fade-in': 'fadeIn 0.2s ease-in-out',
-        'story-pulse': 'storyPulse 2s infinite',
+        'fade-in': 'fadeIn 0.2s ease-out',
+        'scale-in': 'scaleIn 0.18s ease-out',
       },
       keyframes: {
-        likeHeart: {
-          '0%': { transform: 'scale(0)', opacity: '0' },
-          '50%': { transform: 'scale(1.2)', opacity: '1' },
-          '100%': { transform: 'scale(1)', opacity: '0' },
-        },
         fadeIn: {
-          '0%': { opacity: '0', transform: 'scale(0.98)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
+          '0%': { opacity: '0', transform: 'translateY(4px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
         },
-        storyPulse: {
-          '0%, 100%': { transform: 'scale(1)' },
-          '50%': { transform: 'scale(1.04)' },
+        scaleIn: {
+          '0%': { opacity: '0', transform: 'scale(0.96)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
         }
       }
     },
   },
   plugins: [],
-}
+};

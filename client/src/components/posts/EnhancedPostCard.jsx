@@ -136,8 +136,13 @@ const MediaEngine = ({ urls, onDoubleTap }) => {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export default function PostCard({ post }) {
-  const [liked, setLiked] = useState(false);
+  const [liked, setLiked] = useState(Boolean(post.isLiked ?? post.hasLiked ?? (post.userVote === 1)));
   const [likes, setLikes] = useState(post.upvotes || 0);
+
+  useEffect(() => {
+    setLiked(Boolean(post.isLiked ?? post.hasLiked ?? (post.userVote === 1)));
+    setLikes(post.upvotes || 0);
+  }, [post._id, post.isLiked, post.hasLiked, post.userVote, post.upvotes]);
 
   const toggleLike = async () => {
     const wasLiked = liked;
@@ -145,18 +150,20 @@ export default function PostCard({ post }) {
     
     // Optimistic UI
     setLiked(newLiked);
-    setLikes(prev => wasLiked ? prev - 1 : prev + 1);
+    setLikes(prev => wasLiked ? Math.max(0, prev - 1) : prev + 1);
     
     try {
         // Call actual backend API
         const { votePost } = await import('../../services/postService');
-        await votePost(post._id, newLiked ? 1 : 0);
-        
+        const res = await votePost(post._id, newLiked ? 1 : 0);
+        if (res && typeof res.upvotes === 'number') {
+          setLikes(res.upvotes);
+        }
         if (newLiked && navigator.vibrate) navigator.vibrate(10);
     } catch (err) {
         // Revert on failure
         setLiked(wasLiked);
-        setLikes(prev => wasLiked ? prev : prev - 1);
+        setLikes(prev => wasLiked ? prev + 1 : Math.max(0, prev - 1));
         toast.error('Sync failed. Please check your connection.');
     }
   };

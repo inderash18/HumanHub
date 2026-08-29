@@ -34,6 +34,10 @@ export const useSocket = () => {
                 toast(`New notification: ${payload.message}`, { icon: '🔔' });
             });
 
+            socketInstance.on('post:voted', (payload) => {
+                window.dispatchEvent(new CustomEvent('post:voted:event', { detail: payload }));
+            });
+
             socketInstance.on('post:verified', (payload) => {
                 window.dispatchEvent(new CustomEvent('post:verified:event', { detail: payload }));
                 

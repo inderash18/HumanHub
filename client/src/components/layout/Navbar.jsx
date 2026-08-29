@@ -1,304 +1,341 @@
-import { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../../store/authStore';
-import { useAuth } from '../../hooks/useAuth';
-import { FiSearch, FiPlusSquare, FiBell, FiMessageSquare, FiX, FiTrendingUp } from 'react-icons/fi';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { 
+  Search, 
+  Bell, 
+  MessageSquare, 
+  Plus, 
+  ShieldCheck, 
+  Settings, 
+  LogOut, 
+  User, 
+  Fingerprint,
+  ChevronDown,
+  X,
+  Users,
+  Compass
+} from 'lucide-react';
+import { useAuthStore } from '../../store/useAuthStore';
 import api from '../../services/api';
+import UserAvatar from '../common/UserAvatar';
+import Button from '../ui/Button';
+import Badge from '../ui/Badge';
+import CreatePostModal from '../posts/CreatePostModal';
 
 export default function Navbar() {
-  const { isAuthenticated, user } = useAuthStore();
-  const { handleLogout } = useAuth();
+  const { user, isAuthenticated, logout } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [searchVal, setSearchVal] = useState('');
-  const [searchFocused, setSearchFocused] = useState(false);
-  const [recentSearches, setRecentSearches] = useState(() => {
-    return JSON.parse(localStorage.getItem('recent_searches') || '["watercolors", "ai verification", "organicsocial"]');
-  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const menuRef = useRef(null);
-  const searchRef = useRef(null);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const [unreadMsgs, setUnreadMsgs] = useState(0);
 
-  const onLogout = async () => {
-    await handleLogout();
-    navigate('/');
-    setUserMenuOpen(false);
-  };
+  const profileMenuRef = useRef(null);
+  const searchContainerRef = useRef(null);
 
-  // Click outside to close menus
+  // Close menus on outside click
   useEffect(() => {
-    const handler = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setUserMenuOpen(false);
+    const handleOutsideClick = (e) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setProfileDropdownOpen(false);
       }
-      if (searchRef.current && !searchRef.current.contains(e.target)) {
-        setSearchFocused(false);
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
+        setSearchDropdownOpen(false);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  const [suggestions, setSuggestions] = useState([]);
-
+  // Fetch unread counters
   useEffect(() => {
-    if (!searchVal.trim()) {
-      setSuggestions([]);
+    if (isAuthenticated && user) {
+      fetchCounts();
+    }
+  }, [isAuthenticated, user?._id, location.pathname]);
+
+  const fetchCounts = async () => {
+    try {
+      const [notifRes, msgRes] = await Promise.all([
+        api.get('/notifications/unread-count').catch(() => ({ data: { count: 0 } })),
+        api.get('/messages/unread-count').catch(() => ({ data: { count: 0 } }))
+      ]);
+      setUnreadNotifs(notifRes.data?.count || 0);
+      setUnreadMsgs(msgRes.data?.count || 0);
+    } catch (err) {}
+  };
+
+  // Debounced user search
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setSearchDropdownOpen(false);
       return;
     }
-    const delayDebounce = setTimeout(async () => {
+
+    const timer = setTimeout(async () => {
       try {
-        const res = await api.get(`/users/search/query?q=${encodeURIComponent(searchVal)}`);
-        setSuggestions((res.data || []).map(u => ({
-          type: 'user',
-          name: u.username,
-          handle: u.username,
-          detail: `Trust Score: ${Math.round(u.trustScore * 100)}%`
-        })));
+        setIsSearching(true);
+        const res = await api.get(`/users/search/query?q=${encodeURIComponent(searchQuery.trim())}`);
+        setSearchResults(res.data || []);
+        setSearchDropdownOpen(true);
       } catch (err) {
-        console.error(err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
       }
-    }, 250);
+    }, 200);
 
-    return () => clearTimeout(delayDebounce);
-  }, [searchVal]);
-
-  const handleSearchSubmit = (e) => {
-    if (e.key === 'Enter' && searchVal.trim()) {
-      saveRecentSearch(searchVal.trim());
-      setSearchFocused(false);
-      navigate(`/feed?search=${encodeURIComponent(searchVal)}`);
-    }
-  };
-
-  const saveRecentSearch = (query) => {
-    const updated = [query, ...recentSearches.filter(q => q !== query)].slice(0, 5);
-    setRecentSearches(updated);
-    localStorage.setItem('recent_searches', JSON.stringify(updated));
-  };
-
-  const deleteRecentSearch = (e, query) => {
-    e.stopPropagation();
-    const updated = recentSearches.filter(q => q !== query);
-    setRecentSearches(updated);
-    localStorage.setItem('recent_searches', JSON.stringify(updated));
-  };
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-14 z-50 flex items-center justify-between px-6 border-b border-[var(--border-color)] nav-premium-blur">
-      {/* Left: Brand Logo */}
-      <Link to="/" className="flex items-center gap-2.5 no-underline select-none">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-[var(--brand-color)]">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" />
-          <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-        </svg>
-        <span className="font-brand text-lg font-black tracking-[-0.04em] text-[var(--text-primary)]">
-          HumanHub
-        </span>
-      </Link>
-
-      {/* Center: Search pill with Suggestion Overlay */}
-      <div ref={searchRef} className="hidden sm:block flex-1 max-w-sm mx-4 relative">
-        <div className="flex items-center gap-2 px-3.5 h-9 rounded-full bg-[var(--surface-hover)] border border-transparent focus-within:border-[var(--border-color)] transition-all">
-          <FiSearch className="text-[var(--text-secondary)] text-md" />
-          <input
-            type="text"
-            placeholder="Search verified content..."
-            value={searchVal}
-            onChange={e => setSearchVal(e.target.value)}
-            onFocus={() => setSearchFocused(true)}
-            onKeyDown={handleSearchSubmit}
-            className="bg-transparent border-none outline-none text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] w-full font-medium"
-          />
-          {searchVal && (
-            <button onClick={() => setSearchVal('')} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-              <FiX className="text-sm" />
-            </button>
-          )}
-        </div>
-
-        {/* Suggestion Dropdown Drop */}
-        {searchFocused && (
-          <div className="absolute left-0 right-0 top-11 bg-[var(--surface-color)] border border-[var(--border-color)] rounded-[20px] shadow-2xl z-50 p-4 flex flex-col gap-4 animate-in">
-            {/* If input has query values -> Show matched suggestions */}
-            {searchVal.trim() !== '' ? (
-              <div className="flex flex-col gap-3">
-                <span className="text-[9px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">Matched Results</span>
-                <div className="flex flex-col gap-2.5">
-                  {suggestions.length === 0 ? (
-                    <span className="text-xs text-[var(--text-muted)] italic">No verified match found.</span>
-                  ) : (
-                    suggestions.map((c, idx) => (
-                      <div 
-                        key={idx}
-                        onClick={() => {
-                          saveRecentSearch(searchVal.trim());
-                          setSearchFocused(false);
-                          navigate(c.type === 'user' ? `/u/${c.handle}` : `/${c.handle}`);
-                        }}
-                        className="flex items-center justify-between p-2 rounded-xl hover:bg-[var(--surface-hover)] cursor-pointer transition-colors"
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-[var(--text-primary)]">{c.name}</span>
-                          <span className="text-[10px] text-[var(--text-secondary)]">@{c.handle}</span>
-                        </div>
-                        <span className="text-[10px] font-semibold text-[var(--text-muted)] bg-[var(--surface-hover)] px-2 py-0.5 rounded">
-                          {c.detail}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
+    <>
+      <header className="sticky top-0 z-30 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200 select-none">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          
+          {/* 1. Left: Brand Identity */}
+          <div className="flex items-center gap-6">
+            <Link to="/" className="flex items-center gap-2.5 group">
+              <div className="w-9 h-9 rounded-xl bg-black flex items-center justify-center text-white text-lg shadow-sm group-hover:bg-neutral-800 transition-colors">
+                <Fingerprint className="w-5 h-5" />
               </div>
-            ) : (
-              // Empty search input -> Show Recent & Trending searches
-              <>
-                {/* Recent Searches */}
-                {recentSearches.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">Recent Searches</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {recentSearches.map((q, idx) => (
-                        <div 
-                          key={idx}
-                          onClick={() => {
-                            setSearchVal(q);
-                            saveRecentSearch(q);
-                            setSearchFocused(false);
-                            navigate(`/feed?search=${encodeURIComponent(q)}`);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--surface-hover)] hover:bg-[var(--border-color)] text-[10px] font-bold text-[var(--text-primary)] cursor-pointer transition-colors"
-                        >
-                          <span>{q}</span>
-                          <button 
-                            onClick={(e) => deleteRecentSearch(e, q)}
-                            className="text-[var(--text-secondary)] hover:text-red-500 transition-colors"
-                          >
-                            <FiX size={10} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="flex flex-col">
+                <span className="font-display font-extrabold text-base text-black tracking-tight leading-none">
+                  Human<span className="text-neutral-500">Hub</span>
+                </span>
+                <span className="text-[10px] font-mono-code text-neutral-400 mt-0.5">Verified Social Network</span>
+              </div>
+            </Link>
 
-                {/* Trending Topics */}
-                <div className="flex flex-col gap-2 border-t border-[var(--border-color)] pt-3">
-                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1">
-                    <FiTrendingUp className="text-[var(--brand-color)]" />
-                    <span>Trending Searches</span>
-                  </span>
-                  <div className="flex flex-col gap-2 mt-1">
-                    {['#watercolors', '#yosemite', '#proofofhumanity', '#linearstyle'].map((tag, idx) => (
-                      <div 
-                        key={idx}
-                        onClick={() => {
-                          setSearchVal(tag);
-                          saveRecentSearch(tag);
-                          setSearchFocused(false);
-                          navigate(`/feed?search=${encodeURIComponent(tag)}`);
-                        }}
-                        className="text-xs font-semibold text-[var(--text-primary)] hover:text-[var(--brand-color)] cursor-pointer flex items-center justify-between"
-                      >
-                        <span>{tag}</span>
-                        <span className="text-[9px] text-[var(--text-muted)] font-mono">{(8.4 - idx * 1.5).toFixed(1)}k searches</span>
+            {/* Desktop Navigation Links */}
+            <nav className="hidden md:flex items-center gap-1">
+              <Link 
+                to="/feed" 
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                  location.pathname === '/feed' 
+                    ? 'bg-neutral-100 text-black font-bold border border-neutral-200/80 shadow-sm' 
+                    : 'text-neutral-600 hover:text-black hover:bg-neutral-50'
+                }`}
+              >
+                Home Feed
+              </Link>
+              <Link 
+                to="/explore" 
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  location.pathname === '/explore' 
+                    ? 'bg-neutral-100 text-black font-bold border border-neutral-200/80 shadow-sm' 
+                    : 'text-neutral-600 hover:text-black hover:bg-neutral-50'
+                }`}
+              >
+                <Compass className="w-3.5 h-3.5" />
+                Discover
+              </Link>
+              <Link 
+                to="/communities" 
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  location.pathname === '/communities' 
+                    ? 'bg-neutral-100 text-black font-bold border border-neutral-200/80 shadow-sm' 
+                    : 'text-neutral-600 hover:text-black hover:bg-neutral-50'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                Communities
+              </Link>
+            </nav>
+          </div>
+
+          {/* 2. Middle: Search Component */}
+          <div ref={searchContainerRef} className="relative flex-1 max-w-xs sm:max-w-sm hidden sm:block">
+            <div className="relative flex items-center">
+              <Search className="absolute left-3.5 w-4 h-4 text-neutral-400 pointer-events-none" />
+              <input 
+                type="text"
+                placeholder="Search people, posts, or communities..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => searchQuery.trim() && setSearchDropdownOpen(true)}
+                className="w-full bg-neutral-50 border border-neutral-200 text-black text-xs rounded-xl pl-9 pr-3 py-2 outline-none focus:border-black focus:bg-white placeholder:text-neutral-400"
+              />
+            </div>
+
+            {/* Live Search Dropdown */}
+            {searchDropdownOpen && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-neutral-200 rounded-2xl shadow-xl p-2 z-50 max-h-72 overflow-y-auto divide-y divide-neutral-100 animate-fade-in">
+                {isSearching ? (
+                  <p className="text-xs text-neutral-400 text-center py-4">Searching...</p>
+                ) : searchResults.length > 0 ? (
+                  searchResults.map((u) => (
+                    <div 
+                      key={u._id}
+                      onClick={() => {
+                        setSearchDropdownOpen(false);
+                        setSearchQuery('');
+                        navigate(`/u/${u.username}`);
+                      }}
+                      className="flex items-center justify-between p-2 rounded-xl hover:bg-neutral-50 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <UserAvatar 
+                          src={u.avatar} 
+                          name={u.displayName || u.username} 
+                          size="xs"
+                          verified={u.isVerified}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-black truncate">{u.displayName || u.username}</p>
+                          <p className="text-[10px] text-neutral-400 truncate">@{u.username}</p>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-neutral-400 text-center py-4">No users found matching "{searchQuery}"</p>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Right Actions */}
-      <div className="flex items-center gap-4">
-        {!isAuthenticated ? (
-          <>
-            <button 
-              onClick={() => navigate('/login')}
-              className="text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] px-3 py-2 transition-colors"
-            >
-              Log In
-            </button>
-            <button 
-              onClick={() => navigate('/register')}
-              className="btn-premium py-1.5 px-4 text-xs"
-            >
-              Sign Up
-            </button>
-          </>
-        ) : (
-          <>
-            {/* Create Action Button */}
-            <Link 
-              to="/submit" 
-              className="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-[var(--border-color)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-all text-xs font-semibold"
-            >
-              <FiPlusSquare className="text-sm" />
-              <span>Create</span>
-            </Link>
+          {/* 3. Right: User Actions & Profile Dropdown */}
+          <div className="flex items-center gap-2.5">
+            {isAuthenticated && user ? (
+              <>
+                {/* Create Post CTA */}
+                <Button 
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setIsCreateOpen(true)}
+                  icon={Plus}
+                  className="hidden sm:inline-flex"
+                >
+                  Create
+                </Button>
 
-            {/* Notifications Button */}
-            <Link to="/notifications" className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 relative transition-colors">
-              <FiBell className="text-xl" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[var(--brand-color)] rounded-full border-2 border-[var(--bg-color)]"></span>
-            </Link>
+                {/* Messages Link */}
+                <Link 
+                  to="/messages" 
+                  className={`relative p-2 rounded-xl border transition-colors ${
+                    location.pathname === '/messages' 
+                      ? 'bg-neutral-100 border-neutral-300 text-black' 
+                      : 'bg-white border-neutral-200 text-neutral-600 hover:text-black hover:bg-neutral-50'
+                  }`}
+                  title="Messages"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  {unreadMsgs > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-black text-white text-[9px] font-bold flex items-center justify-center">
+                      {unreadMsgs}
+                    </span>
+                  )}
+                </Link>
 
-            {/* Messages Button */}
-            <Link to="/messages" className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 transition-colors">
-              <FiMessageSquare className="text-xl" />
-            </Link>
+                {/* Notifications Link */}
+                <Link 
+                  to="/notifications" 
+                  className={`relative p-2 rounded-xl border transition-colors ${
+                    location.pathname === '/notifications' 
+                      ? 'bg-neutral-100 border-neutral-300 text-black' 
+                      : 'bg-white border-neutral-200 text-neutral-600 hover:text-black hover:bg-neutral-50'
+                  }`}
+                  title="Activity"
+                >
+                  <Bell className="w-4 h-4" />
+                  {unreadNotifs > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-black text-white text-[9px] font-bold flex items-center justify-center">
+                      {unreadNotifs}
+                    </span>
+                  )}
+                </Link>
 
-            {/* Profile Menu Trigger */}
-            <div ref={menuRef} className="relative flex items-center">
-              <button
-                onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="w-8 h-8 rounded-full border border-[var(--border-color)] overflow-hidden flex items-center justify-center bg-[var(--surface-hover)] focus:outline-none"
-              >
-                {user?.avatar ? (
-                  <img src={user.avatar} className="w-full h-full object-cover" alt="" />
-                ) : (
-                  <span className="text-[var(--text-primary)] font-bold text-xs uppercase">{user?.username?.[0]}</span>
-                )}
-              </button>
-
-              {userMenuOpen && (
-                <div className="absolute right-0 top-10 w-56 bg-[var(--surface-color)] border border-[var(--border-color)] rounded-xl shadow-xl z-50 p-1.5 animate-in">
-                  <div className="px-3.5 py-2.5 border-b border-[var(--border-color)] mb-1">
-                    <div className="text-[13px] font-bold text-[var(--text-primary)]">{user?.username}</div>
-                    <div className="text-[10px] text-[var(--text-muted)] mt-0.5">Verified Human</div>
-                  </div>
-                  
-                  <Link 
-                    to={`/u/${user?.username}`} 
-                    onClick={() => setUserMenuOpen(false)}
-                    className="block px-3.5 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-lg transition-all"
-                  >
-                    Profile
-                  </Link>
-                  <Link 
-                    to="/settings" 
-                    onClick={() => setUserMenuOpen(false)}
-                    className="block px-3.5 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-lg transition-all"
-                  >
-                    Settings
-                  </Link>
-                  <div className="h-[1px] bg-[var(--border-color)] my-1"></div>
+                {/* User Menu Trigger */}
+                <div ref={profileMenuRef} className="relative">
                   <button 
-                    onClick={onLogout}
-                    className="w-full text-left px-3.5 py-2 text-xs font-semibold text-red-500 hover:bg-red-500/5 rounded-lg transition-all"
+                    onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                    className="flex items-center gap-1.5 p-1 rounded-xl border border-neutral-200 hover:border-neutral-300 transition-colors bg-white shadow-sm"
                   >
-                    Logout
+                    <UserAvatar 
+                      src={user.avatar} 
+                      name={user.displayName || user.username} 
+                      size="xs"
+                      verified={user.isVerified}
+                    />
+                    <ChevronDown className="w-3.5 h-3.5 text-neutral-500 mr-1" />
                   </button>
+
+                  {/* Profile Dropdown Menu */}
+                  {profileDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-56 bg-white border border-neutral-200 rounded-2xl shadow-2xl p-1.5 z-50 animate-fade-in divide-y divide-neutral-100">
+                      <div className="p-2.5">
+                        <p className="text-xs font-bold text-black truncate">{user.displayName || user.username}</p>
+                        <p className="text-[11px] text-neutral-400 truncate">@{user.username}</p>
+                      </div>
+
+                      <div className="py-1">
+                        <Link
+                          to={`/u/${user.username}`}
+                          onClick={() => setProfileDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-neutral-700 hover:text-black hover:bg-neutral-50 transition-colors"
+                        >
+                          <User className="w-4 h-4" />
+                          Profile
+                        </Link>
+                        <Link
+                          to="/settings"
+                          onClick={() => setProfileDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-neutral-700 hover:text-black hover:bg-neutral-50 transition-colors"
+                        >
+                          <Settings className="w-4 h-4" />
+                          Settings & Privacy
+                        </Link>
+                      </div>
+
+                      <div className="pt-1">
+                        <button
+                          onClick={() => {
+                            setProfileDropdownOpen(false);
+                            logout();
+                            navigate('/login');
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-red-600 hover:bg-red-50 transition-colors text-left"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Sign Out
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </header>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link to="/login">
+                  <Button variant="ghost" size="sm">
+                    Sign In
+                  </Button>
+                </Link>
+                <Link to="/register">
+                  <Button variant="primary" size="sm">
+                    Create Identity
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </header>
+
+      {/* Create Post Modal */}
+      {isCreateOpen && (
+        <CreatePostModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+      )}
+    </>
   );
 }

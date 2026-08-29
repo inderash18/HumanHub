@@ -48,23 +48,11 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Apply rate limiting to all requests (could be scoped just to /api)
 app.use('/api', apiLimiter);
 
-// Fix: Vote routes must be defined BEFORE the general /api/posts route to avoid shadowing
-app.use('/api/posts/:postId/vote', (req, res, next) => {
-    req.params.id = req.params.postId;
-    req.baseUrl = '/api/posts'; 
-    next();
-}, voteRoutes);
-
-app.use('/api/comments/:commentId/vote', (req, res, next) => {
-    req.params.id = req.params.commentId;
-    req.baseUrl = '/api/comments';
-    next();
-}, voteRoutes);
-
 // General routes
 app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/comments', commentRoutes);
+app.use('/api/votes', voteRoutes);
 app.use('/api/communities', communityRoutes);
 app.use('/api/posts/upload', (await import('./routes/upload.js')).default);
 

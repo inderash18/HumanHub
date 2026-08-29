@@ -9,6 +9,12 @@ const userSchema = new mongoose.Schema({
     minlength: 3,
     maxlength: 30
   },
+  displayName: {
+    type: String,
+    trim: true,
+    maxlength: 50,
+    default: ''
+  },
   email: {
     type: String,
     required: true,
@@ -27,13 +33,17 @@ const userSchema = new mongoose.Schema({
   },
   trustScore: {
     type: Number,
-    default: 0.5,
+    default: 0.95,
     min: 0.0,
     max: 1.0
   },
+  isVerified: {
+    type: Boolean,
+    default: true
+  },
   emailVerified: {
     type: Boolean,
-    default: false
+    default: true
   },
   isBanned: {
     type: Boolean,
@@ -45,7 +55,7 @@ const userSchema = new mongoose.Schema({
   },
   bio: {
     type: String,
-    maxlength: 200,
+    maxlength: 300,
     default: ''
   },
   followers: [{
@@ -57,7 +67,23 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     default: []
-  }]
+  }],
+  savedPosts: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Post',
+    default: []
+  }],
+  privacySettings: {
+    isPrivate: { type: Boolean, default: false },
+    hideActivity: { type: Boolean, default: false },
+    allowDirectMessages: { type: Boolean, default: true }
+  }
 }, { timestamps: true });
 
+userSchema.index({ username: 1 });
+userSchema.index({ email: 1 });
+userSchema.index({ followers: 1 });
+userSchema.index({ following: 1 });
+
 export default mongoose.model('User', userSchema);
+

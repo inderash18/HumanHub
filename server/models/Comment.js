@@ -9,12 +9,14 @@ const commentSchema = new mongoose.Schema({
   author: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   post: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Post',
-    required: true
+    required: true,
+    index: true
   },
   parent: {
     type: mongoose.Schema.Types.ObjectId,
@@ -51,5 +53,8 @@ const commentSchema = new mongoose.Schema({
     default: false
   }
 }, { timestamps: true });
+
+commentSchema.index({ post: 1, createdAt: 1 });
+commentSchema.index({ author: 1, createdAt: -1 });
 
 export default mongoose.model('Comment', commentSchema);

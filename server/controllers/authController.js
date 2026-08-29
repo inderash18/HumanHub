@@ -9,7 +9,12 @@ import bcrypt from 'bcryptjs';
 export const registerUser = asyncHandler(async (req, res) => {
   const { username, email, password, bio } = req.body;
 
-  const userExists = await User.findOne({ $or: [{ email }, { username }] });
+  const userExists = await User.findOne({ 
+    $or: [
+      { email: email.toLowerCase().trim() }, 
+      { username: new RegExp(`^${username.trim()}$`, 'i') }
+    ] 
+  });
   if (userExists) {
     res.status(400);
     throw new Error('User already exists');
@@ -19,8 +24,8 @@ export const registerUser = asyncHandler(async (req, res) => {
   const passwordHash = await bcrypt.hash(password, salt);
 
   const user = await User.create({
-    username,
-    email,
+    username: username.trim(),
+    email: email.toLowerCase().trim(),
     passwordHash,
     bio: bio || 'Verified human creator on HumanHub.',
     trustScore: 1.0,
@@ -72,10 +77,11 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new Error('Please provide email/username and password');
   }
 
+  const trimmedIdentifier = identifier.trim();
   const user = await User.findOne({
     $or: [
-      { email: identifier.toLowerCase() },
-      { username: identifier.toLowerCase() }
+      { email: trimmedIdentifier.toLowerCase() },
+      { username: new RegExp(`^${trimmedIdentifier}$`, 'i') }
     ]
   });
 

@@ -12,12 +12,12 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-[#f5f5f5] flex">
-      {/* Instagram Sidebar */}
+    <div className="min-h-screen bg-hub-background text-hub-text-primary flex transition-colors duration-200">
+      {/* Sleek Minimal Left Sidebar */}
       <Sidebar />
 
       {/* Main Content Area */}
-      <main className="flex-1 min-h-screen pl-0 md:pl-[72px] xl:pl-[245px] pb-14 md:pb-0 overflow-x-hidden">
+      <main className="flex-1 min-h-screen pl-0 md:pl-[72px] xl:pl-[240px] pb-16 md:pb-0 overflow-x-hidden">
         <Outlet />
       </main>
 

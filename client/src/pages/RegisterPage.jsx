@@ -1,18 +1,27 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { MdVerified } from 'react-icons/md';
-import { IoShieldCheckmark } from 'react-icons/io5';
+import { 
+  Fingerprint, 
+  Mail, 
+  User, 
+  Lock, 
+  Eye, 
+  EyeOff, 
+  UserPlus
+} from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import api from '../services/api';
+import Button from '../components/ui/Button';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { setAuth } = useAuthStore();
   const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [bio, setBio] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async (e) => {
@@ -25,15 +34,16 @@ export default function RegisterPage() {
       setLoading(true);
       const res = await api.post('/auth/register', {
         email: email.trim(),
+        displayName: displayName.trim() || username.trim(),
         username: username.trim().toLowerCase(),
         password,
-        bio: bio.trim() || 'Verified human creator on HumanHub.'
+        bio: 'Connecting and sharing on HumanHub.'
       });
 
       const { user, token } = res.data;
       setAuth(user, token);
-      toast.success(`Welcome to HumanHub, @${user.username}! ✅`);
-      navigate('/');
+      toast.success('Account created! Welcome to HumanHub ✨');
+      navigate('/feed');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Registration failed.');
     } finally {
@@ -42,74 +52,112 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-[350px] flex flex-col gap-3">
-        {/* Main Sign Up Box */}
-        <div className="bg-black border border-[#262626] p-8 rounded-xl flex flex-col items-center">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="font-brand text-3xl font-bold text-white tracking-tight flex items-center gap-1.5">
-              HumanHub
-              <MdVerified className="text-[#0095f6] text-2xl" />
-            </span>
+    <div className="min-h-screen bg-hub-background text-hub-text-primary flex flex-col items-center justify-center p-4 select-none relative overflow-hidden">
+      {/* Top-Left Brand Indicator */}
+      <div className="absolute top-6 left-6 z-20">
+        <Link to="/" className="flex items-center gap-2.5 group">
+          <div className="w-8 h-8 rounded-xl bg-hub-accent flex items-center justify-center text-white text-base shadow-sm">
+            <Fingerprint className="w-4 h-4" />
+          </div>
+          <span className="font-display font-extrabold text-sm text-hub-text-primary tracking-tight">
+            Human<span className="text-hub-accent">Hub</span>
+          </span>
+        </Link>
+      </div>
+
+      {/* Centered Register Card */}
+      <div className="relative z-10 w-full max-w-[420px] mx-auto animate-fade-in my-8">
+        <div className="bg-hub-surface border border-hub-border rounded-3xl p-7 sm:p-8 shadow-2xl flex flex-col items-center">
+          
+          {/* Top Badge */}
+          <div className="w-12 h-12 rounded-2xl bg-hub-surface-elevated border border-hub-border flex items-center justify-center text-hub-accent text-xl shadow-inner mb-4">
+            <UserPlus className="w-6 h-6" />
           </div>
 
-          <p className="text-xs font-semibold text-[#a8a8a8] text-center mb-6 leading-relaxed">
-            Sign up to share authentic photos, reels, and stories with verified humans.
+          <h1 className="font-display text-xl font-bold text-hub-text-primary text-center mb-1 tracking-tight">
+            Create your account
+          </h1>
+          <p className="text-xs text-hub-text-secondary text-center max-w-[300px] mb-6 leading-relaxed">
+            Join HumanHub to discover communities and connect with friends.
           </p>
 
-          <form onSubmit={handleRegister} className="w-full flex flex-col gap-2">
-            <input 
-              type="email"
-              placeholder="Email address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-[#121212] border border-[#262626] text-white text-xs rounded-md px-3 py-3 outline-none focus:border-[#737373]"
-              required
-            />
-            <input 
-              type="text"
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full bg-[#121212] border border-[#262626] text-white text-xs rounded-md px-3 py-3 outline-none focus:border-[#737373]"
-              required
-            />
-            <input 
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#121212] border border-[#262626] text-white text-xs rounded-md px-3 py-3 outline-none focus:border-[#737373]"
-              required
-            />
-            <input 
-              type="text"
-              placeholder="Short Bio (optional)"
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              className="w-full bg-[#121212] border border-[#262626] text-white text-xs rounded-md px-3 py-3 outline-none focus:border-[#737373]"
-            />
+          <form onSubmit={handleRegister} className="w-full space-y-3.5">
+            {/* Email */}
+            <div className="relative flex items-center">
+              <Mail className="absolute left-3.5 w-4 h-4 text-hub-text-tertiary pointer-events-none" />
+              <input 
+                type="email"
+                placeholder="Email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-hub-surface-elevated border border-hub-border text-hub-text-primary text-xs rounded-xl pl-10 pr-4 py-3 outline-none focus:border-hub-accent transition-all placeholder:text-hub-text-tertiary"
+                required
+              />
+            </div>
 
-            <p className="text-[11px] text-[#737373] text-center my-3 leading-relaxed">
-              By signing up, you agree to our Terms and our Proof of Humanity verification standards.
-            </p>
+            {/* Display Name */}
+            <div className="relative flex items-center">
+              <User className="absolute left-3.5 w-4 h-4 text-hub-text-tertiary pointer-events-none" />
+              <input 
+                type="text"
+                placeholder="Display Name (e.g. Alex Rivera)"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full bg-hub-surface-elevated border border-hub-border text-hub-text-primary text-xs rounded-xl pl-10 pr-4 py-3 outline-none focus:border-hub-accent transition-all placeholder:text-hub-text-tertiary"
+              />
+            </div>
 
-            <button 
+            {/* Unique Username */}
+            <div className="relative flex items-center">
+              <span className="absolute left-3.5 text-hub-text-tertiary text-xs font-mono-code font-bold pointer-events-none">@</span>
+              <input 
+                type="text"
+                placeholder="Unique username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-hub-surface-elevated border border-hub-border text-hub-text-primary text-xs rounded-xl pl-10 pr-4 py-3 outline-none focus:border-hub-accent transition-all placeholder:text-hub-text-tertiary"
+                required
+              />
+            </div>
+
+            {/* Password */}
+            <div className="relative flex items-center">
+              <Lock className="absolute left-3.5 w-4 h-4 text-hub-text-tertiary pointer-events-none" />
+              <input 
+                type={showPassword ? "text" : "password"}
+                placeholder="Password (minimum 8 characters)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-hub-surface-elevated border border-hub-border text-hub-text-primary text-xs rounded-xl pl-10 pr-10 py-3 outline-none focus:border-hub-accent transition-all placeholder:text-hub-text-tertiary"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 text-hub-text-tertiary hover:text-hub-text-primary transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+
+            <Button 
               type="submit"
               disabled={loading || !email || !username || !password}
-              className="w-full bg-[#0095f6] hover:bg-[#1877f2] disabled:opacity-40 text-white font-semibold text-sm py-2 rounded-lg transition-colors shadow-lg shadow-blue-500/20"
+              isLoading={loading}
+              variant="primary"
+              size="md"
+              className="w-full mt-2"
             >
-              {loading ? 'Creating account...' : 'Sign up'}
-            </button>
+              Create Account
+            </Button>
           </form>
-        </div>
 
-        {/* Login Redirect Box */}
-        <div className="bg-black border border-[#262626] p-5 rounded-xl text-center text-xs text-white">
-          Have an account?{' '}
-          <Link to="/login" className="font-semibold text-[#0095f6] hover:underline">
-            Log in
-          </Link>
+          <p className="text-xs text-hub-text-secondary text-center mt-6">
+            Already have an account?{' '}
+            <Link to="/login" className="text-hub-accent font-semibold hover:underline">
+              Sign in
+            </Link>
+          </p>
         </div>
       </div>
     </div>

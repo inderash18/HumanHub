@@ -42,10 +42,9 @@ export default function CommentCard({ comment, postId, onReply, onSubmitSuccess 
         );
     };
 
-    // Simulated premium English translation text
     const getTranslatedText = () => {
         if (translations[comment.body]) return translations[comment.body];
-        return `[Translated from Latin]: This is a verified human response. Splendid insight! 🌿`;
+        return `[Translated]: Really great post! Thanks for sharing this. 🌿`;
     };
 
     return (

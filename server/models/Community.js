@@ -29,6 +29,11 @@ const communitySchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
+  members: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: []
+  }],
   rules: [{
     type: String
   }],
@@ -49,5 +54,8 @@ const communitySchema = new mongoose.Schema({
     default: 0
   }
 }, { timestamps: true });
+
+communitySchema.index({ slug: 1 });
+communitySchema.index({ members: 1 });
 
 export default mongoose.model('Community', communitySchema);

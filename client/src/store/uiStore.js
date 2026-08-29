@@ -1,6 +1,19 @@
 import { create } from 'zustand';
 
-export const useUIStore = create((set) => ({
+const initialTheme = localStorage.getItem('theme') || 'light';
+
+// Initialize DOM on script execution
+if (typeof document !== 'undefined') {
+  if (initialTheme === 'dark') {
+    document.documentElement.classList.add('dark');
+    document.documentElement.classList.remove('light');
+  } else {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
+  }
+}
+
+export const useUIStore = create((set, get) => ({
   sidebarOpen: false,
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   
@@ -9,10 +22,24 @@ export const useUIStore = create((set) => ({
   closeModal: () => set({ modalView: null }),
 
   // Theme support
-  theme: localStorage.getItem('theme') || 'dark', // Defaulting to dark as standard premium look
-  toggleTheme: () => set((state) => {
-    const nextTheme = state.theme === 'light' ? 'dark' : 'light';
-    localStorage.setItem('theme', nextTheme);
-    return { theme: nextTheme };
-  })
+  theme: initialTheme,
+  setTheme: (theme) => {
+    localStorage.setItem('theme', theme);
+    if (typeof document !== 'undefined') {
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+      }
+    }
+    set({ theme });
+  },
+  toggleTheme: () => {
+    const current = get().theme;
+    const next = current === 'dark' ? 'light' : 'dark';
+    get().setTheme(next);
+  }
 }));
+

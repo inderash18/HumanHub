@@ -37,9 +37,9 @@ export default function Hero({ onWaitlistClick }) {
                          <div className="text-xs font-mono text-brand-muted uppercase">Bot Attempts Blocked</div>
                      </div>
                      <div className="text-center">
-                         <div className="text-2xl font-playfair font-bold text-white mb-1">850k</div>
-                         <div className="text-xs font-mono text-brand-muted uppercase">Verified Human Posts</div>
-                     </div>
+                          <div className="text-2xl font-playfair font-bold text-white mb-1">850k</div>
+                          <div className="text-xs font-mono text-brand-muted uppercase">Publications</div>
+                      </div>
                      <div className="text-center">
                          <div className="text-2xl font-playfair font-bold text-white mb-1">100%</div>
                          <div className="text-xs font-mono text-brand-muted uppercase">Organic Communities</div>

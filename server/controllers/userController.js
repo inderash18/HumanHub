@@ -1,222 +1,133 @@
+import mongoose from 'mongoose';
 import asyncHandler from '../utils/asyncHandler.js';
 import User from '../models/User.js';
 import Post from '../models/Post.js';
-import Vote from '../models/Vote.js';
-import { createNotification } from './notificationController.js';
+import Follow from '../models/Follow.js';
+import Like from '../models/Like.js';
+import SavedPost from '../models/SavedPost.js';
+import Notification from '../models/Notification.js';
 
-// @desc    Get user profile by ID or username
-// @route   GET /api/users/:id
+// @desc    Get user profile by username or ID
+// @route   GET /api/users/profile/:id
 // @access  Public (Optional Auth)
 export const getUserProfile = asyncHandler(async (req, res) => {
-  const identifier = req.params.id;
-  const isObjectId = identifier.match(/^[0-9a-fA-F]{24}$/);
+  const identifier = req.params.id || req.params.username;
+  const isObjectId = mongoose.Types.ObjectId.isValid(identifier);
 
   const user = await (isObjectId 
     ? User.findById(identifier) 
-    : User.findOne({ username: new RegExp(`^${identifier}$`, 'i') }))
-    .select('-passwordHash -email');
+    : User.findOne({ username: identifier.toLowerCase().trim() }))
+    .select('-passwordHash');
 
   if (!user) {
     res.status(404);
     throw new Error('User not found');
   }
 
-  const posts = await Post.find({ author: user._id, status: 'published' })
-    .populate('community', 'name slug iconUrl')
-    .sort({ createdAt: -1 })
-    .limit(30);
+  const [posts, totalPosts, isFollowing] = await Promise.all([
+    Post.find({ author: user._id, status: 'published' })
+      .populate('community', 'name slug icon')
+      .sort({ createdAt: -1 })
+      .limit(30),
+    Post.countDocuments({ author: user._id, status: 'published' }),
+    req.user ? Follow.exists({ follower: req.user._id, following: user._id }) : false
+  ]);
 
-  const totalPostsCount = await Post.countDocuments({ author: user._id, status: 'published' });
+  // Check liked & saved status for logged-in user
+  let likedPostIds = new Set();
+  let savedPostIds = new Set();
 
-  let userVotesMap = new Map();
-  let userSavedSet = new Set();
-  let isFollowing = false;
-
-  if (req.user) {
-    if (posts.length > 0) {
-      const postIds = posts.map(p => p._id);
-      const votes = await Vote.find({
-        user: req.user._id,
-        targetType: 'post',
-        targetId: { $in: postIds }
-      });
-      votes.forEach(v => {
-        userVotesMap.set(v.targetId.toString(), v.value);
-      });
-    }
-
-    const currentReqUser = await User.findById(req.user._id).select('savedPosts following');
-    if (currentReqUser) {
-      (currentReqUser.savedPosts || []).forEach(id => userSavedSet.add(id.toString()));
-      isFollowing = (currentReqUser.following || []).some(id => id.toString() === user._id.toString());
-    }
+  if (req.user && posts.length > 0) {
+    const postIds = posts.map(p => p._id);
+    const [likes, saves] = await Promise.all([
+      Like.find({ user: req.user._id, post: { $in: postIds } }),
+      SavedPost.find({ user: req.user._id, post: { $in: postIds } })
+    ]);
+    likes.forEach(l => likedPostIds.add(l.post.toString()));
+    saves.forEach(s => savedPostIds.add(s.post.toString()));
   }
 
   const formattedPosts = posts.map(p => {
     const postObj = p.toObject();
-    const voteVal = userVotesMap.get(p._id.toString()) || 0;
-    const isSaved = userSavedSet.has(p._id.toString());
+    const idStr = p._id.toString();
     return {
       ...postObj,
-      userVote: voteVal,
-      isLiked: voteVal === 1,
-      hasLiked: voteVal === 1,
-      isSaved
+      author: {
+        _id: user._id,
+        username: user.username,
+        displayName: user.displayName,
+        avatar: user.avatar
+      },
+      hasLiked: likedPostIds.has(idStr),
+      isLiked: likedPostIds.has(idStr),
+      isSaved: savedPostIds.has(idStr)
     };
   });
+
+  const followersCount = await Follow.countDocuments({ following: user._id });
+  const followingCount = await Follow.countDocuments({ follower: user._id });
 
   const profileData = {
     _id: user._id,
     username: user.username,
     displayName: user.displayName || user.username,
+    email: req.user?._id.toString() === user._id.toString() ? user.email : undefined,
     avatar: user.avatar,
     bio: user.bio,
     role: user.role,
-    trustScore: user.trustScore ?? 0.95,
-    isVerified: user.isVerified ?? true,
-    emailVerified: user.emailVerified ?? true,
-    followersCount: user.followers?.length || 0,
-    followingCount: user.following?.length || 0,
-    postsCount: totalPostsCount,
-    savedCount: user.savedPosts?.length || 0,
-    isFollowing,
-    privacySettings: user.privacySettings || { isPrivate: false, hideActivity: false, allowDirectMessages: true },
+    followersCount,
+    followingCount,
+    postsCount: totalPosts,
+    isFollowing: !!isFollowing,
+    isSelf: req.user?._id.toString() === user._id.toString(),
+    privacySettings: user.privacySettings || { isPrivate: false, allowDirectMessages: true },
     createdAt: user.createdAt
   };
 
-  res.json({ profile: profileData, posts: formattedPosts });
+  res.status(200).json({ profile: profileData, posts: formattedPosts });
 });
 
-// @desc    Update user profile
-// @route   PUT /api/users/me
+// @desc    Update authenticated user's profile
+// @route   PUT /api/users/profile
 // @access  Private
 export const updateUserProfile = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.user._id);
-    if (!user) {
-        res.status(404);
-        throw new Error('User not found');
-    }
-
-    if (req.body.displayName !== undefined) user.displayName = req.body.displayName.trim();
-    if (req.body.bio !== undefined) user.bio = req.body.bio.trim();
-    if (req.body.avatar !== undefined) user.avatar = req.body.avatar.trim();
-    if (req.body.privacySettings) {
-      user.privacySettings = {
-        ...user.privacySettings,
-        ...req.body.privacySettings
-      };
-    }
-
-    const updatedUser = await user.save();
-    res.json({
-        _id: updatedUser._id,
-        username: updatedUser.username,
-        displayName: updatedUser.displayName,
-        email: updatedUser.email,
-        bio: updatedUser.bio,
-        avatar: updatedUser.avatar,
-        trustScore: updatedUser.trustScore,
-        isVerified: updatedUser.isVerified,
-        privacySettings: updatedUser.privacySettings
-    });
-});
-
-// @desc    Upload profile avatar image
-// @route   POST /api/users/avatar
-// @access  Private
-export const uploadAvatar = asyncHandler(async (req, res) => {
-  if (!req.file) {
-    res.status(400);
-    throw new Error('Please select an image file to upload');
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
   }
 
-  const avatarUrl = `/api/uploads/${req.file.filename}`;
-  const user = await User.findByIdAndUpdate(
-    req.user._id,
-    { avatar: avatarUrl },
-    { new: true, runValidators: true }
-  ).select('-passwordHash');
+  if (req.body.displayName !== undefined) user.displayName = req.body.displayName.trim();
+  if (req.body.bio !== undefined) user.bio = req.body.bio.trim();
+  if (req.body.avatar !== undefined) user.avatar = req.body.avatar.trim();
+  if (req.body.privacySettings) {
+    user.privacySettings = {
+      ...user.privacySettings,
+      ...req.body.privacySettings
+    };
+  }
 
-  res.json({
+  const updatedUser = await user.save();
+
+  res.status(200).json({
     success: true,
-    message: 'Profile image updated successfully',
-    avatar: avatarUrl,
-    user
+    user: {
+      _id: updatedUser._id,
+      username: updatedUser.username,
+      displayName: updatedUser.displayName,
+      email: updatedUser.email,
+      bio: updatedUser.bio,
+      avatar: updatedUser.avatar,
+      followersCount: updatedUser.followersCount || 0,
+      followingCount: updatedUser.followingCount || 0,
+      postsCount: updatedUser.postsCount || 0,
+      privacySettings: updatedUser.privacySettings
+    },
+    message: 'Profile updated successfully'
   });
 });
 
-// @desc    Get user followers
-// @route   GET /api/users/:id/followers
-// @access  Private
-export const getUserFollowers = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id)
-    .populate('followers', 'username displayName avatar trustScore isVerified bio');
-  
-  if (!user) {
-    res.status(404);
-    throw new Error('User not found');
-  }
-
-  res.json(user.followers || []);
-});
-
-// @desc    Get user following
-// @route   GET /api/users/:id/following
-// @access  Private
-export const getUserFollowing = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id)
-    .populate('following', 'username displayName avatar trustScore isVerified bio');
-  
-  if (!user) {
-    res.status(404);
-    throw new Error('User not found');
-  }
-
-  res.json(user.following || []);
-});
-
-// @desc    Delete user account
-// @route   DELETE /api/users/me
-// @access  Private
-export const deleteUser = asyncHandler(async (req, res) => {
-    const userId = req.user._id;
-    console.log(`[Identity Purge] Initiating for User: ${userId}`);
-
-    const user = await User.findByIdAndDelete(userId);
-    if (!user) {
-        res.status(404);
-        throw new Error('Identity not found in database');
-    }
-
-    res.cookie('refreshToken', '', {
-        httpOnly: true,
-        expires: new Date(0)
-    });
-
-    console.log(`[Identity Purge] Successfully removed: ${userId}`);
-    res.json({ message: 'User account permanently purged from HumanHub' });
-});
-
-// @desc    Get suggested verified human users
-// @route   GET /api/users/suggested
-// @access  Private
-export const getSuggestedUsers = asyncHandler(async (req, res) => {
-  const currentUser = await User.findById(req.user._id).select('following');
-  const followingIds = currentUser?.following || [];
-
-  const suggestions = await User.find({
-    _id: { $nin: [...followingIds, req.user._id] },
-    username: { $nin: ['dhruvit_system', 'system', 'admin'] },
-    role: { $ne: 'system' },
-    isBanned: false
-  })
-  .select('username displayName avatar trustScore isVerified bio followers')
-  .limit(6);
-
-  res.json(suggestions);
-});
-
-// @desc    Follow / Unfollow user
+// @desc    Follow or Unfollow a user
 // @route   POST /api/users/:id/follow
 // @access  Private
 export const followUser = asyncHandler(async (req, res) => {
@@ -229,68 +140,110 @@ export const followUser = asyncHandler(async (req, res) => {
   }
 
   const targetUser = await User.findById(targetId);
-  const currentUser = await User.findById(currentUserId);
-
   if (!targetUser) {
     res.status(404);
-    throw new Error('Target user not found');
+    throw new Error('User not found');
   }
 
-  if (!currentUser.following) currentUser.following = [];
-  if (!targetUser.followers) targetUser.followers = [];
+  const existingFollow = await Follow.findOne({ follower: currentUserId, following: targetId });
+  let isFollowing = false;
 
-  const isFollowing = currentUser.following.some(id => id.toString() === targetId);
-
-  if (isFollowing) {
-    currentUser.following = currentUser.following.filter(id => id.toString() !== targetId);
-    targetUser.followers = targetUser.followers.filter(id => id.toString() !== currentUserId.toString());
+  if (existingFollow) {
+    await Follow.deleteOne({ _id: existingFollow._id });
+    await Promise.all([
+      User.findByIdAndUpdate(currentUserId, { $inc: { followingCount: -1 } }),
+      User.findByIdAndUpdate(targetId, { $inc: { followersCount: -1 } }),
+      Notification.deleteMany({ recipient: targetId, sender: currentUserId, type: 'follow' })
+    ]);
+    isFollowing = false;
   } else {
-    currentUser.following.push(targetId);
-    targetUser.followers.push(currentUserId);
-    
-    // Dispatch follow notification
-    await createNotification({
-      recipient: targetId,
-      sender: currentUserId,
-      type: 'follow',
-      body: `@${currentUser.username} is now following your authentic human journey.`
-    });
+    await Follow.create({ follower: currentUserId, following: targetId });
+    await Promise.all([
+      User.findByIdAndUpdate(currentUserId, { $inc: { followingCount: 1 } }),
+      User.findByIdAndUpdate(targetId, { $inc: { followersCount: 1 } }),
+      Notification.create({
+        recipient: targetId,
+        sender: currentUserId,
+        type: 'follow',
+        text: 'started following you.'
+      })
+    ]);
+    isFollowing = true;
   }
 
-  await currentUser.save();
-  await targetUser.save();
+  const [followersCount, followingCount] = await Promise.all([
+    Follow.countDocuments({ following: targetId }),
+    Follow.countDocuments({ follower: currentUserId })
+  ]);
 
-  res.json({ 
-    success: true, 
-    isFollowing: !isFollowing,
-    followersCount: targetUser.followers.length,
-    followingCount: currentUser.following.length
+  res.status(200).json({
+    success: true,
+    isFollowing,
+    followersCount,
+    followingCount,
+    message: isFollowing ? 'Followed successfully' : 'Unfollowed successfully'
   });
+});
+
+// @desc    Get user followers
+// @route   GET /api/users/:id/followers
+// @access  Public
+export const getUserFollowers = asyncHandler(async (req, res) => {
+  const targetId = req.params.id;
+  const followRecords = await Follow.find({ following: targetId })
+    .populate('follower', 'username displayName avatar bio')
+    .sort({ createdAt: -1 });
+
+  const followers = followRecords.map(f => f.follower).filter(Boolean);
+  res.status(200).json(followers);
+});
+
+// @desc    Get user following
+// @route   GET /api/users/:id/following
+// @access  Public
+export const getUserFollowing = asyncHandler(async (req, res) => {
+  const targetId = req.params.id;
+  const followRecords = await Follow.find({ follower: targetId })
+    .populate('following', 'username displayName avatar bio')
+    .sort({ createdAt: -1 });
+
+  const following = followRecords.map(f => f.following).filter(Boolean);
+  res.status(200).json(following);
+});
+
+// @desc    Get suggested users from real registered users
+// @route   GET /api/users/suggestions
+// @access  Private
+export const getSuggestedUsers = asyncHandler(async (req, res) => {
+  const followingRecords = await Follow.find({ follower: req.user._id }).select('following');
+  const followingIds = followingRecords.map(f => f.following);
+
+  const suggestions = await User.find({
+    _id: { $nin: [...followingIds, req.user._id] },
+    isBanned: false
+  })
+  .select('username displayName avatar bio followersCount')
+  .limit(8);
+
+  res.status(200).json(suggestions);
 });
 
 // @desc    Search users by username or displayName
 // @route   GET /api/users/search/query
-// @access  Private
+// @access  Public
 export const searchUsers = asyncHandler(async (req, res) => {
-  const query = req.query.q || '';
-  if (!query.trim()) return res.json([]);
-  
+  const query = (req.query.q || '').trim();
+  if (!query) return res.status(200).json([]);
+
   const results = await User.find({
     $or: [
-      { username: { $regex: query.trim(), $options: 'i' } },
-      { displayName: { $regex: query.trim(), $options: 'i' } }
+      { username: { $regex: query, $options: 'i' } },
+      { displayName: { $regex: query, $options: 'i' } }
     ],
-    username: { $nin: ['dhruvit_system', 'system', 'admin'] },
-    role: { $ne: 'system' },
     isBanned: false
   })
-  .select('username displayName avatar trustScore isVerified bio')
-  .limit(10);
+  .select('username displayName avatar bio followersCount')
+  .limit(12);
 
-  res.json(results);
+  res.status(200).json(results);
 });
-
-
-
-
-

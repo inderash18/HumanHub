@@ -113,7 +113,7 @@ export default function Sidebar() {
       requireAuth: true
     },
     { 
-      path: user ? `/u/${user.username}` : '/login', 
+      path: user ? `/u/${user.username}` : '/?mode=signin', 
       label: 'Profile', 
       isProfile: true,
       requireAuth: true
@@ -280,7 +280,7 @@ export default function Sidebar() {
             <Button
               variant="primary"
               size="md"
-              onClick={() => navigate('/login')}
+              onClick={() => navigate('/?mode=signin')}
               className="w-full"
             >
               <span className="hidden xl:inline">Sign In</span>

@@ -1,31 +1,40 @@
 import mongoose from 'mongoose';
 
 const messageSchema = new mongoose.Schema({
+  conversationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Conversation',
+    required: true,
+    index: true
+  },
   sender: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
-    index: true
+    required: true
   },
-  receiver: {
+  recipient: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
-    index: true
+    required: true
   },
-  text: {
+  body: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    maxlength: 2000
   },
-  unread: {
+  mediaUrl: {
+    type: String,
+    default: ''
+  },
+  read: {
     type: Boolean,
-    default: true,
+    default: false,
     index: true
   }
 }, { timestamps: true });
 
-messageSchema.index({ sender: 1, receiver: 1, createdAt: 1 });
-messageSchema.index({ receiver: 1, unread: 1 });
+messageSchema.index({ conversationId: 1, createdAt: 1 });
+messageSchema.index({ recipient: 1, read: 1 });
 
 export default mongoose.model('Message', messageSchema);

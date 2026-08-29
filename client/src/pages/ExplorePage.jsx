@@ -6,13 +6,13 @@ import {
   Heart, 
   MessageSquare,
   Users,
-  UserPlus
+  UserPlus,
+  Sparkles
 } from 'lucide-react';
 import api from '../services/api';
 import UserAvatar from '../components/common/UserAvatar';
-import Badge from '../components/ui/Badge';
-import EmptyState from '../components/ui/EmptyState';
-import PageHeader from '../components/layout/PageHeader';
+import EmptyState from '../components/common/EmptyState';
+import { PostSkeleton } from '../components/common/SkeletonLoader';
 import { toast } from 'react-hot-toast';
 
 export default function ExplorePage() {
@@ -35,10 +35,12 @@ export default function ExplorePage() {
         api.get('/posts?limit=40'),
         api.get('/communities')
       ]);
-      setPosts(postsRes.data?.data || postsRes.data || []);
-      setCommunities(commRes.data || []);
+      const postData = postsRes.data?.data || postsRes.data?.posts || postsRes.data || [];
+      setPosts(Array.isArray(postData) ? postData : []);
+      setCommunities(Array.isArray(commRes.data) ? commRes.data : []);
     } catch (err) {
       setPosts([]);
+      setCommunities([]);
     } finally {
       setLoading(false);
     }
@@ -52,7 +54,7 @@ export default function ExplorePage() {
     const timer = setTimeout(async () => {
       try {
         const res = await api.get(`/users/search/query?q=${encodeURIComponent(searchTerm.trim())}`);
-        setUsers(res.data || []);
+        setUsers(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
         setUsers([]);
       }
@@ -65,13 +67,13 @@ export default function ExplorePage() {
       const res = await api.post(`/users/${targetId}/follow`);
       toast.success(res.data.isFollowing ? 'Following!' : 'Unfollowed');
     } catch (err) {
-      toast.error('Failed to follow');
+      toast.error('Failed to update follow');
     }
   };
 
   const filteredPosts = posts.filter((p) => {
-    const text = `${p.title || ''} ${p.body || ''} ${p.author?.username || ''}`.toLowerCase();
-    const matchesSearch = text.includes(searchTerm.toLowerCase());
+    const text = `${p.caption || ''} ${p.body || ''} ${p.author?.username || ''}`.toLowerCase();
+    const matchesSearch = !searchTerm.trim() || text.includes(searchTerm.toLowerCase());
     if (!matchesSearch) return false;
     if (activeTab === 'photos') return p.mediaUrls && p.mediaUrls.length > 0;
     return true;
@@ -79,40 +81,44 @@ export default function ExplorePage() {
 
   const filteredCommunities = communities.filter((c) => {
     const text = `${c.name} ${c.slug} ${c.description || ''}`.toLowerCase();
-    return text.includes(searchTerm.toLowerCase());
+    return !searchTerm.trim() || text.includes(searchTerm.toLowerCase());
   });
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 select-none">
-      <PageHeader 
-        title="Discover"
-        description="Explore moments, creative ideas, and conversations from across the community."
-        icon={Compass}
-        badge={
-          <Badge variant="cyan" size="sm">
-            {posts.length} Posts
-          </Badge>
-        }
-      />
+    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 select-none space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Compass className="w-5 h-5 text-[var(--cyan)]" />
+            <h1 className="font-display text-xl sm:text-2xl font-extrabold text-[var(--text-primary)]">
+              Discover
+            </h1>
+          </div>
+          <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
+            Explore moments, active communities, and people from across HumanHub.
+          </p>
+        </div>
+      </div>
 
       {/* Search Input & Filter Tabs */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="max-w-md w-full relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-hub-text-tertiary" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
           <input 
             type="text"
-            placeholder="Search posts, topics, or people..."
+            placeholder="Search moments, topics, or people..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-hub-surface border border-hub-border text-hub-text-primary text-xs rounded-xl pl-10 pr-4 py-2.5 outline-none focus:border-hub-accent placeholder:text-hub-text-tertiary shadow-xl"
+            className="w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text-primary)] text-xs rounded-xl pl-10 pr-4 py-2.5 outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-tertiary)] shadow-xl"
           />
         </div>
 
         {/* Tab Filters */}
-        <div className="flex items-center gap-1.5 p-1 bg-hub-surface border border-hub-border rounded-xl shadow-xl">
+        <div className="flex items-center gap-1.5 p-1 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl">
           {[
-            { id: 'all', label: 'All' },
-            { id: 'photos', label: 'Photos' },
+            { id: 'all', label: 'Moments' },
+            { id: 'photos', label: 'Media' },
             { id: 'communities', label: 'Communities' },
             { id: 'people', label: 'People' }
           ].map(tab => (
@@ -121,8 +127,8 @@ export default function ExplorePage() {
               onClick={() => setActiveTab(tab.id)}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                 activeTab === tab.id
-                  ? 'bg-hub-accent text-white shadow-sm'
-                  : 'text-hub-text-secondary hover:text-hub-text-primary'
+                  ? 'bg-[var(--accent)] text-white shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               {tab.label}
@@ -133,22 +139,21 @@ export default function ExplorePage() {
 
       {/* People Results Tab */}
       {activeTab === 'people' && (
-        <div className="space-y-3 mb-6">
+        <div className="space-y-3">
           {users.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {users.map(u => (
-                <div key={u._id} className="p-4 rounded-3xl bg-hub-surface border border-hub-border shadow-xl flex items-center justify-between">
+                <div key={u._id} className="p-4 rounded-3xl bg-[var(--surface)] border border-[var(--border)] shadow-xl flex items-center justify-between">
                   <Link to={`/u/${u.username}`} className="flex items-center gap-3 min-w-0">
                     <UserAvatar src={u.avatar} name={u.displayName || u.username} size="sm" />
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-hub-text-primary truncate">{u.displayName || u.username}</p>
-                      <p className="text-[10px] text-hub-text-tertiary truncate">@{u.username}</p>
+                      <p className="text-xs font-bold text-[var(--text-primary)] truncate">{u.displayName || u.username}</p>
+                      <p className="text-[10px] text-[var(--text-tertiary)] truncate">@{u.username}</p>
                     </div>
                   </Link>
                   <button 
                     onClick={() => handleFollowUser(u._id)}
-                    className="p-2 rounded-xl bg-hub-surface-elevated hover:bg-hub-accent hover:text-white text-hub-text-secondary transition-colors"
-                    title="Follow"
+                    className="p-2 rounded-xl bg-[var(--surface-elevated)] hover:bg-[var(--accent)] hover:text-white text-[var(--text-secondary)] transition-colors"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
                   </button>
@@ -158,114 +163,117 @@ export default function ExplorePage() {
           ) : (
             <EmptyState 
               icon={Users}
-              title="Search for People"
-              description="Type a name or username in the search bar above to discover people on HumanHub."
+              title={searchTerm ? `No users matching "${searchTerm}"` : "Search for people"}
+              description="Find creators and friends across HumanHub."
             />
           )}
         </div>
       )}
 
-      {/* Communities Results Tab */}
+      {/* Communities Tab */}
       {activeTab === 'communities' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+        <div>
           {filteredCommunities.length > 0 ? (
-            filteredCommunities.map(c => (
-              <Link 
-                key={c._id || c.slug}
-                to={`/c/${c.slug}`}
-                className="p-5 rounded-3xl bg-hub-surface border border-hub-border hover:border-hub-border-light shadow-xl transition-all flex flex-col justify-between group"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-9 h-9 rounded-xl bg-hub-surface-elevated border border-hub-border flex items-center justify-center text-hub-violet font-bold text-sm">
-                      {c.name.charAt(0)}
-                    </div>
-                    <Badge variant="violet" size="sm">
-                      c/{c.slug}
-                    </Badge>
-                  </div>
-                  <h3 className="font-display font-bold text-sm text-hub-text-primary group-hover:underline mt-1">
-                    {c.name}
-                  </h3>
-                  <p className="text-xs text-hub-text-secondary line-clamp-2 mt-1 leading-relaxed">
-                    {c.description || 'A community space on HumanHub.'}
-                  </p>
-                </div>
-                <div className="pt-3 mt-3 border-t border-hub-border text-xs text-hub-text-tertiary">
-                  {c.memberCount || 1} members
-                </div>
-              </Link>
-            ))
-          ) : (
-            <EmptyState 
-              icon={Users}
-              title="No Communities Found"
-              description="No community spaces matched your search."
-            />
-          )}
-        </div>
-      )}
-
-      {/* Posts Grid for All & Photos Tabs */}
-      {(activeTab === 'all' || activeTab === 'photos') && (
-        <>
-          {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-48 bg-hub-surface border border-hub-border rounded-3xl animate-pulse p-4 shadow-xl" />
-              ))}
-            </div>
-          ) : filteredPosts.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {filteredPosts.map((post) => (
-                <Link 
-                  key={post._id}
-                  to={`/p/${post._id}`}
-                  className="p-5 rounded-3xl bg-hub-surface border border-hub-border hover:border-hub-border-light transition-all flex flex-col justify-between shadow-xl group"
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredCommunities.map((c) => (
+                <Link
+                  key={c._id}
+                  to={`/c/${c.slug}`}
+                  className="p-5 rounded-3xl bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--border-subtle)] transition-all shadow-xl flex flex-col justify-between group"
                 >
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <UserAvatar 
-                          src={post.author?.avatar} 
-                          name={post.author?.displayName || post.author?.username} 
-                          size="xs"
-                        />
-                        <span className="font-bold text-xs text-hub-text-primary truncate max-w-[150px]">
-                          {post.author?.displayName || post.author?.username || 'member'}
-                        </span>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-[var(--surface-elevated)] border border-[var(--border)] flex items-center justify-center text-[var(--violet)] font-bold text-sm">
+                        {c.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-xs sm:text-sm text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
+                          c/{c.name}
+                        </h3>
+                        <span className="text-[10px] text-[var(--text-tertiary)]">{c.memberCount || 1} members</span>
                       </div>
                     </div>
-
-                    <h3 className="font-display font-bold text-sm text-hub-text-primary group-hover:underline line-clamp-1 mb-1">
-                      {post.title || post.body?.slice(0, 40)}
-                    </h3>
-                    <p className="text-xs text-hub-text-secondary line-clamp-3 leading-relaxed">
-                      {post.body}
+                    <p className="text-xs text-[var(--text-secondary)] line-clamp-2">
+                      {c.description}
                     </p>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-hub-border text-[11px] text-hub-text-tertiary">
-                    <span className="flex items-center gap-1 font-mono-code text-hub-text-secondary">
-                      <Heart className="w-3 h-3 text-hub-accent" /> {post.upvotes || 0}
-                    </span>
-                    <span className="flex items-center gap-1 font-mono-code text-hub-text-secondary">
-                      <MessageSquare className="w-3 h-3 text-hub-cyan" /> {post.comments?.length || 0}
-                    </span>
                   </div>
                 </Link>
               ))}
             </div>
           ) : (
             <EmptyState 
-              icon={Compass}
-              title="No Posts Found"
-              description={searchTerm ? `No posts matched "${searchTerm}".` : 'No posts published in the community yet.'}
-              actionLabel={searchTerm ? "Clear Search" : undefined}
-              onAction={searchTerm ? () => setSearchTerm('') : undefined}
+              icon={Users}
+              title="No communities found"
+              description="Explore new topics or create your own community circle."
             />
           )}
-        </>
+        </div>
+      )}
+
+      {/* Moments / Photos Grid */}
+      {(activeTab === 'all' || activeTab === 'photos') && (
+        <div>
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <PostSkeleton />
+              <PostSkeleton />
+              <PostSkeleton />
+            </div>
+          ) : filteredPosts.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {filteredPosts.map((post) => {
+                const mediaUrl = post.mediaUrls && post.mediaUrls[0];
+                return (
+                  <div
+                    key={post._id}
+                    onClick={() => navigate(`/p/${post._id}`)}
+                    className="p-4 rounded-3xl bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--border-subtle)] cursor-pointer transition-all shadow-xl flex flex-col justify-between gap-3 group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <UserAvatar 
+                        src={post.author?.avatar} 
+                        name={post.author?.displayName || post.author?.username} 
+                        size="xs" 
+                      />
+                      <span className="font-bold text-xs text-[var(--text-primary)] truncate">
+                        @{post.author?.username || 'member'}
+                      </span>
+                    </div>
+
+                    {mediaUrl ? (
+                      <div className="w-full aspect-square rounded-2xl overflow-hidden bg-[var(--surface-elevated)]">
+                        <img 
+                          src={mediaUrl} 
+                          alt="Moment thumbnail" 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[var(--text-secondary)] line-clamp-4 leading-relaxed my-2">
+                        {post.caption || post.body}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between text-[11px] text-[var(--text-tertiary)] pt-1 border-t border-[var(--border)]">
+                      <span className="flex items-center gap-1">
+                        <Heart className="w-3.5 h-3.5 text-[var(--accent)]" /> {post.likesCount || 0}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <MessageSquare className="w-3.5 h-3.5 text-[var(--cyan)]" /> {post.commentsCount || 0}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState 
+              icon={Sparkles}
+              title="No moments discovered yet"
+              description="Be the first to share your creative moments with HumanHub."
+            />
+          )}
+        </div>
       )}
     </div>
   );

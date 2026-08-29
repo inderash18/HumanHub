@@ -5,14 +5,15 @@ import {
   UserPlus, 
   Users, 
   ArrowRight, 
+  Sparkles,
   MessageSquare
 } from 'lucide-react';
 import PostCard from '../components/posts/PostCard';
 import CreatePostModal from '../components/posts/CreatePostModal';
 import UserAvatar from '../components/common/UserAvatar';
+import EmptyState from '../components/common/EmptyState';
+import { PostSkeleton } from '../components/common/SkeletonLoader';
 import Button from '../components/ui/Button';
-import EmptyState from '../components/ui/EmptyState';
-import { PostCardSkeleton } from '../components/ui/LoadingSkeleton';
 import { useAuthStore } from '../store/useAuthStore';
 import api from '../services/api';
 import { toast } from 'react-hot-toast';
@@ -37,8 +38,8 @@ export default function FeedPage() {
     try {
       setLoading(true);
       const res = await api.get('/posts');
-      const data = res.data?.data || res.data || [];
-      setPosts(data);
+      const data = res.data?.data || res.data?.posts || res.data || [];
+      setPosts(Array.isArray(data) ? data : []);
     } catch (err) {
       setPosts([]);
     } finally {
@@ -48,8 +49,8 @@ export default function FeedPage() {
 
   const fetchSuggestedUsers = async () => {
     try {
-      const res = await api.get('/users/suggested/list');
-      setSuggestedUsers(res.data || []);
+      const res = await api.get('/users/suggestions');
+      setSuggestedUsers(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       setSuggestedUsers([]);
     }
@@ -75,17 +76,17 @@ export default function FeedPage() {
           {isAuthenticated && user && (
             <div 
               onClick={() => setIsCreateOpen(true)}
-              className="p-4 rounded-3xl bg-hub-surface border border-hub-border hover:border-hub-border-light cursor-pointer transition-all flex items-center gap-3.5 shadow-xl group"
+              className="p-4 rounded-3xl bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--border-subtle)] cursor-pointer transition-all flex items-center gap-3.5 shadow-xl group"
             >
               <UserAvatar 
                 src={user.avatar} 
                 name={user.displayName || user.username} 
                 size="sm"
               />
-              <div className="flex-1 px-4 py-2.5 rounded-2xl bg-hub-surface-elevated border border-hub-border text-xs text-hub-text-tertiary group-hover:text-hub-text-secondary transition-colors">
-                What's on your mind? Share a story, thought, or photo...
+              <div className="flex-1 px-4 py-2.5 rounded-2xl bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)] transition-colors">
+                What's on your mind? Share a thought, photo, or story...
               </div>
-              <div className="p-2 rounded-2xl bg-hub-accent text-white group-hover:opacity-90 transition-opacity">
+              <div className="p-2 rounded-2xl bg-[var(--accent)] text-white group-hover:opacity-90 transition-opacity shadow-sm">
                 <Plus className="w-4 h-4" />
               </div>
             </div>
@@ -94,8 +95,8 @@ export default function FeedPage() {
           {/* Feed Posts List */}
           {loading ? (
             <div className="flex flex-col gap-4">
-              <PostCardSkeleton />
-              <PostCardSkeleton />
+              <PostSkeleton />
+              <PostSkeleton />
             </div>
           ) : posts.length > 0 ? (
             <div className="flex flex-col gap-4">
@@ -109,12 +110,12 @@ export default function FeedPage() {
             </div>
           ) : (
             <EmptyState 
-              icon={MessageSquare}
-              title="No Posts Yet"
-              description="Be the first to share a moment or start a conversation with the community."
-              actionLabel="Create First Post"
+              icon={Sparkles}
+              title="Your Feed is Ready"
+              description="No moments have been shared yet. Be the first to share something with the community!"
+              actionLabel={isAuthenticated ? "Create First Post" : "Sign In to Post"}
               onAction={() => {
-                if (!isAuthenticated) navigate('/login');
+                if (!isAuthenticated) navigate('/?mode=signin');
                 else setIsCreateOpen(true);
               }}
             />
@@ -125,7 +126,7 @@ export default function FeedPage() {
         <div className="hidden lg:flex flex-col w-[300px] gap-5 select-none flex-shrink-0">
           {/* User Status Card */}
           {isAuthenticated && user ? (
-            <div className="p-4 rounded-3xl bg-hub-surface border border-hub-border flex items-center justify-between shadow-xl">
+            <div className="p-4 rounded-3xl bg-[var(--surface)] border border-[var(--border)] flex items-center justify-between shadow-xl">
               <Link to={`/u/${user.username}`} className="flex items-center gap-3 min-w-0 group">
                 <UserAvatar 
                   src={user.avatar} 
@@ -133,24 +134,24 @@ export default function FeedPage() {
                   size="md"
                 />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-hub-text-primary truncate group-hover:underline">
+                  <p className="text-xs font-bold text-[var(--text-primary)] truncate group-hover:underline">
                     {user.displayName || user.username}
                   </p>
-                  <p className="text-[11px] text-hub-text-tertiary truncate">@{user.username}</p>
+                  <p className="text-[11px] text-[var(--text-tertiary)] truncate">@{user.username}</p>
                 </div>
               </Link>
-              <Link to="/settings" className="text-xs font-semibold text-hub-text-tertiary hover:text-hub-text-primary">
-                Edit
+              <Link to="/settings" className="text-xs font-semibold text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+                Settings
               </Link>
             </div>
           ) : (
-            <div className="p-5 rounded-3xl bg-hub-surface border border-hub-border text-center shadow-xl space-y-3">
-              <h4 className="font-display text-sm font-bold text-hub-text-primary">Join HumanHub</h4>
-              <p className="text-xs text-hub-text-secondary">Connect with friends, discover vibrant communities, and share moments.</p>
+            <div className="p-5 rounded-3xl bg-[var(--surface)] border border-[var(--border)] text-center shadow-xl space-y-3">
+              <h4 className="font-display text-sm font-bold text-[var(--text-primary)]">Join HumanHub</h4>
+              <p className="text-xs text-[var(--text-secondary)]">Connect with friends, discover vibrant communities, and share moments.</p>
               <Button
                 variant="primary"
                 size="md"
-                onClick={() => navigate('/register')}
+                onClick={() => navigate('/?mode=signup')}
                 className="w-full"
               >
                 Sign Up & Join
@@ -160,13 +161,13 @@ export default function FeedPage() {
 
           {/* Suggested Users */}
           {suggestedUsers.length > 0 && (
-            <div className="p-5 rounded-3xl bg-hub-surface border border-hub-border shadow-xl flex flex-col gap-3.5">
+            <div className="p-5 rounded-3xl bg-[var(--surface)] border border-[var(--border)] shadow-xl flex flex-col gap-3.5">
               <div className="flex items-center justify-between">
-                <h4 className="font-display text-xs font-bold text-hub-text-primary uppercase tracking-wider">
+                <h4 className="font-display text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">
                   People to Follow
                 </h4>
-                <Link to="/explore" className="text-[11px] text-hub-text-tertiary hover:text-hub-text-primary font-semibold">
-                  Explore All
+                <Link to="/explore" className="text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] font-semibold">
+                  Discover
                 </Link>
               </div>
 
@@ -180,16 +181,16 @@ export default function FeedPage() {
                         size="sm"
                       />
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-hub-text-primary truncate group-hover:underline">
+                        <p className="text-xs font-bold text-[var(--text-primary)] truncate group-hover:underline">
                           {u.displayName || u.username}
                         </p>
-                        <p className="text-[10px] text-hub-text-tertiary truncate">@{u.username}</p>
+                        <p className="text-[10px] text-[var(--text-tertiary)] truncate">@{u.username}</p>
                       </div>
                     </Link>
 
                     <button 
                       onClick={() => handleFollowSuggested(u._id)}
-                      className="p-1.5 rounded-xl bg-hub-surface-elevated border border-hub-border hover:border-hub-accent text-hub-text-primary text-xs font-bold flex-shrink-0 transition-colors"
+                      className="p-1.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] hover:border-[var(--accent)] text-[var(--text-primary)] text-xs font-bold flex-shrink-0 transition-colors"
                       title="Follow"
                     >
                       <UserPlus className="w-3.5 h-3.5" />
@@ -201,18 +202,18 @@ export default function FeedPage() {
           )}
 
           {/* Community Highlights Card */}
-          <div className="p-5 rounded-3xl bg-hub-surface border border-hub-border flex flex-col gap-2.5 shadow-xl">
+          <div className="p-5 rounded-3xl bg-[var(--surface)] border border-[var(--border)] flex flex-col gap-2.5 shadow-xl">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-hub-surface-elevated border border-hub-border flex items-center justify-center text-hub-violet">
+              <div className="w-8 h-8 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] flex items-center justify-center text-[var(--violet)]">
                 <Users className="w-4 h-4" />
               </div>
-              <span className="font-display text-xs font-bold text-hub-text-primary">Discover Communities</span>
+              <span className="font-display text-xs font-bold text-[var(--text-primary)]">Explore Communities</span>
             </div>
-            <p className="text-[11px] text-hub-text-secondary leading-relaxed">
-              Find spaces that match your passions—photography, design, technology, stories, music, and everyday life.
+            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              Find spaces that match your interests—photography, design, technology, stories, music, and everyday life.
             </p>
-            <Link to="/communities" className="text-[11px] font-bold text-hub-accent hover:underline inline-flex items-center gap-1 mt-1">
-              Browse all communities <ArrowRight className="w-3 h-3" />
+            <Link to="/communities" className="text-[11px] font-bold text-[var(--accent)] hover:underline inline-flex items-center gap-1 mt-1">
+              Browse communities <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
         </div>

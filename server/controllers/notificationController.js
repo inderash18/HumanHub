@@ -1,17 +1,18 @@
 import asyncHandler from '../utils/asyncHandler.js';
 import Notification from '../models/Notification.js';
-import { getIO } from '../socket/socketHandler.js';
 
 // @desc    Get user notifications
 // @route   GET /api/notifications
 // @access  Private
 export const getNotifications = asyncHandler(async (req, res) => {
-  const list = await Notification.find({ recipient: req.user._id })
-    .populate('sender', 'username displayName avatar trustScore isVerified')
+  const notifications = await Notification.find({ recipient: req.user._id })
+    .populate('sender', 'username displayName avatar')
+    .populate('post', 'caption mediaUrls')
+    .populate('community', 'name slug icon')
     .sort({ createdAt: -1 })
-    .limit(40);
+    .limit(50);
 
-  res.json(list);
+  res.status(200).json(notifications);
 });
 
 // @desc    Get unread notification count
@@ -20,45 +21,38 @@ export const getNotifications = asyncHandler(async (req, res) => {
 export const getUnreadCount = asyncHandler(async (req, res) => {
   const count = await Notification.countDocuments({ 
     recipient: req.user._id, 
-    isRead: false 
+    read: false 
   });
 
-  res.json({ count });
+  res.status(200).json({ count });
+});
+
+// @desc    Mark a single notification as read
+// @route   PUT /api/notifications/:id/read
+// @access  Private
+export const markNotificationRead = asyncHandler(async (req, res) => {
+  const notification = await Notification.findOneAndUpdate(
+    { _id: req.params.id, recipient: req.user._id },
+    { read: true },
+    { new: true }
+  );
+
+  if (!notification) {
+    res.status(404);
+    throw new Error('Notification not found');
+  }
+
+  res.status(200).json({ success: true, notification });
 });
 
 // @desc    Mark all notifications as read
-// @route   POST /api/notifications/read-all
+// @route   PUT /api/notifications/read-all
 // @access  Private
 export const markAllRead = asyncHandler(async (req, res) => {
   await Notification.updateMany(
-    { recipient: req.user._id, isRead: false },
-    { isRead: true }
+    { recipient: req.user._id, read: false },
+    { $set: { read: true } }
   );
 
-  res.json({ success: true, count: 0 });
+  res.status(200).json({ success: true, count: 0, message: 'All notifications marked as read' });
 });
-
-// Helper utility to create notifications
-export const createNotification = async ({ recipient, sender, type, postId, body }) => {
-  try {
-    if (!recipient || recipient.toString() === sender?.toString()) return; // Don't notify self
-    
-    const notif = await Notification.create({ recipient, sender, type, postId, body });
-    const populated = await notif.populate('sender', 'username displayName avatar trustScore isVerified');
-
-    try {
-      const io = getIO();
-      if (io) {
-        io.to(`user_${recipient.toString()}`).emit('notification:new', {
-          notification: populated,
-          message: body
-        });
-      }
-    } catch (socketErr) {
-      console.log('[Socket Notif Notice]', socketErr.message);
-    }
-  } catch (err) {
-    console.error("Failed to create notification:", err);
-  }
-};
-

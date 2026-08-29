@@ -2,24 +2,23 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Bookmark, 
-  Activity, 
+  Grid, 
   Settings, 
   MessageSquare, 
   UserPlus, 
   UserMinus, 
-  Lock, 
-  Upload, 
-  Camera
+  Camera,
+  X,
+  Sparkles
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/useAuthStore';
 import api from '../services/api';
 import PostCard from '../components/posts/PostCard';
 import UserAvatar from '../components/common/UserAvatar';
+import EmptyState from '../components/common/EmptyState';
+import { ProfileSkeleton } from '../components/common/SkeletonLoader';
 import Button from '../components/ui/Button';
-import Modal from '../components/ui/Modal';
-import EmptyState from '../components/ui/EmptyState';
-import { Input, Textarea } from '../components/ui/Input';
 
 export default function UserProfilePage() {
   const { username } = useParams();
@@ -36,15 +35,10 @@ export default function UserProfilePage() {
   const [followLoading, setFollowLoading] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [followersModalOpen, setFollowersModalOpen] = useState(false);
-  const [modalTitle, setModalTitle] = useState('');
-  const [modalUsersList, setModalUsersList] = useState([]);
 
   const [editForm, setEditForm] = useState({
     displayName: '',
-    bio: '',
-    avatar: '',
-    isPrivate: false
+    bio: ''
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -60,7 +54,7 @@ export default function UserProfilePage() {
   const fetchUserProfile = async () => {
     try {
       setLoading(true);
-      const res = await api.get(`/users/${targetUsername}`);
+      const res = await api.get(`/users/profile/${targetUsername}`);
       const data = res.data?.profile || res.data?.user || res.data || {};
       setProfile(data);
       setPosts(res.data?.posts || []);
@@ -68,9 +62,7 @@ export default function UserProfilePage() {
 
       setEditForm({
         displayName: data.displayName || data.username || '',
-        bio: data.bio || '',
-        avatar: data.avatar || '',
-        isPrivate: data.privacySettings?.isPrivate || false
+        bio: data.bio || ''
       });
 
       if (isOwnProfile) {
@@ -87,7 +79,7 @@ export default function UserProfilePage() {
   const fetchSavedPosts = async () => {
     try {
       const res = await api.get('/posts/saved');
-      setSavedPosts(res.data || []);
+      setSavedPosts(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       setSavedPosts([]);
     }
@@ -102,27 +94,24 @@ export default function UserProfilePage() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Profile photo must be smaller than 5MB');
-      return;
-    }
-
     try {
       setUploadingAvatar(true);
       const formData = new FormData();
-      formData.append('avatar', file);
+      formData.append('files', file);
 
-      const res = await api.post('/users/avatar', formData, {
+      const uploadRes = await api.post('/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+      const avatarUrl = uploadRes.data.url || (uploadRes.data.urls && uploadRes.data.urls[0]);
 
-      toast.success('Profile photo updated! ✨');
-      if (res.data?.user) {
-        updateUser(res.data.user);
+      if (avatarUrl) {
+        await api.put('/users/profile', { avatar: avatarUrl });
+        updateUser({ avatar: avatarUrl });
+        toast.success('Avatar updated successfully! ✨');
+        fetchUserProfile();
       }
-      fetchUserProfile();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to upload photo');
+      toast.error('Failed to upload avatar');
     } finally {
       setUploadingAvatar(false);
     }
@@ -130,7 +119,7 @@ export default function UserProfilePage() {
 
   const handleFollowToggle = async () => {
     if (!isAuthenticated) {
-      navigate('/login');
+      navigate('/?mode=signin');
       return;
     }
     if (!profile?._id || followLoading) return;
@@ -147,7 +136,7 @@ export default function UserProfilePage() {
       }));
       toast.success(nextFollowingState ? `Following @${profile.username}` : `Unfollowed @${profile.username}`);
     } catch (err) {
-      toast.error('Failed to update follow');
+      toast.error('Failed to update follow status');
     } finally {
       setFollowLoading(false);
     }
@@ -157,19 +146,17 @@ export default function UserProfilePage() {
     e.preventDefault();
     try {
       setSavingEdit(true);
-      const res = await api.put('/users/me', {
+      const res = await api.put('/users/profile', {
         displayName: editForm.displayName.trim(),
-        bio: editForm.bio.trim(),
-        avatar: editForm.avatar.trim(),
-        privacySettings: {
-          isPrivate: editForm.isPrivate
-        }
+        bio: editForm.bio.trim()
       });
 
-      updateUser(res.data);
-      setProfile(prev => ({ ...prev, ...res.data }));
+      if (res.data?.user) {
+        updateUser(res.data.user);
+      }
+      toast.success('Profile updated ✨');
       setEditModalOpen(false);
-      toast.success('Profile updated! ✨');
+      fetchUserProfile();
     } catch (err) {
       toast.error('Failed to save profile changes');
     } finally {
@@ -177,45 +164,21 @@ export default function UserProfilePage() {
     }
   };
 
-  const showFollowers = async () => {
-    if (!profile?._id) return;
-    try {
-      const res = await api.get(`/users/${profile._id}/followers`);
-      setModalTitle(`Followers of @${profile.username}`);
-      setModalUsersList(res.data || []);
-      setFollowersModalOpen(true);
-    } catch (err) {
-      toast.error('Failed to load followers list');
-    }
-  };
-
-  const showFollowing = async () => {
-    if (!profile?._id) return;
-    try {
-      const res = await api.get(`/users/${profile._id}/following`);
-      setModalTitle(`People followed by @${profile.username}`);
-      setModalUsersList(res.data || []);
-      setFollowersModalOpen(true);
-    } catch (err) {
-      toast.error('Failed to load following list');
-    }
-  };
-
   if (loading) {
     return (
-      <div className="w-full max-w-4xl mx-auto px-4 py-20 flex flex-col items-center justify-center select-none">
-        <p className="text-xs text-hub-text-tertiary">Loading profile...</p>
+      <div className="w-full max-w-4xl mx-auto px-4 py-10 select-none">
+        <ProfileSkeleton />
       </div>
     );
   }
 
   if (!profile) {
     return (
-      <div className="w-full max-w-md mx-auto px-4 py-24 select-none">
-        <EmptyState
-          title="User Not Found"
-          description={`The requested username @${targetUsername} does not exist.`}
-          actionLabel="Go to Feed"
+      <div className="w-full max-w-4xl mx-auto px-4 py-16 text-center select-none">
+        <EmptyState 
+          title="User not found"
+          description="The profile you are looking for does not exist or has been removed."
+          actionLabel="Back to Feed"
           onAction={() => navigate('/feed')}
         />
       </div>
@@ -223,327 +186,246 @@ export default function UserProfilePage() {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-6 select-none">
+    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 select-none space-y-8">
       {/* Profile Header Card */}
-      <div className="p-6 sm:p-8 rounded-3xl bg-hub-surface border border-hub-border shadow-xl mb-6">
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-          {/* Avatar with Upload Hover */}
-          <div className="relative flex-shrink-0 group">
+      <div className="p-6 sm:p-8 rounded-3xl bg-[var(--surface)] border border-[var(--border)] shadow-xl relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-8">
+          {/* Avatar with Upload Action */}
+          <div className="relative group">
             <UserAvatar 
               src={profile.avatar} 
               name={profile.displayName || profile.username} 
               size="2xl"
+              className="border-2 border-[var(--border)] shadow-md"
             />
-
             {isOwnProfile && (
-              <>
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingAvatar}
-                  className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-xs font-bold"
-                  title="Upload profile photo"
-                >
-                  <Camera className="w-5 h-5 mb-1" />
-                  <span>{uploadingAvatar ? 'Uploading...' : 'Change'}</span>
-                </button>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleAvatarUpload} 
-                  accept="image/*" 
-                  className="hidden" 
-                />
-              </>
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                className="absolute bottom-0 right-0 p-2 rounded-full bg-[var(--accent)] text-white shadow-lg hover:scale-105 transition-transform"
+                title="Change Avatar"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
             )}
+            <input 
+              ref={fileInputRef}
+              type="file" 
+              accept="image/*" 
+              onChange={handleAvatarUpload} 
+              className="hidden" 
+            />
           </div>
 
-          {/* User Info & Stats */}
-          <div className="flex-1 flex flex-col items-center sm:items-start text-center sm:text-left gap-3">
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+          {/* User Details */}
+          <div className="flex-1 text-center sm:text-left space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h1 className="font-display text-2xl font-bold text-hub-text-primary tracking-tight">
+                <h1 className="font-display text-xl sm:text-2xl font-extrabold text-[var(--text-primary)]">
                   {profile.displayName || profile.username}
                 </h1>
-                <p className="text-xs text-hub-text-tertiary">
+                <p className="text-xs sm:text-sm text-[var(--text-secondary)] font-mono">
                   @{profile.username}
                 </p>
               </div>
-            </div>
 
-            {/* Bio */}
-            <p className="text-xs sm:text-sm text-hub-text-secondary max-w-lg leading-relaxed">
-              {profile.bio || "Connecting and sharing on HumanHub."}
-            </p>
-
-            {/* Stats */}
-            <div className="flex items-center gap-6 sm:gap-8 pt-1">
-              <div className="flex flex-col items-center sm:items-start">
-                <span className="font-display text-base sm:text-lg font-bold text-hub-text-primary">
-                  {profile.postsCount ?? posts.length}
-                </span>
-                <span className="text-[10px] text-hub-text-tertiary uppercase tracking-wider font-semibold">Posts</span>
-              </div>
-
-              <div 
-                onClick={showFollowers}
-                className="flex flex-col items-center sm:items-start cursor-pointer group"
-              >
-                <span className="font-display text-base sm:text-lg font-bold text-hub-text-primary group-hover:underline">
-                  {profile.followersCount ?? 0}
-                </span>
-                <span className="text-[10px] text-hub-text-tertiary uppercase tracking-wider font-semibold group-hover:text-hub-text-primary">Followers</span>
-              </div>
-
-              <div 
-                onClick={showFollowing}
-                className="flex flex-col items-center sm:items-start cursor-pointer group"
-              >
-                <span className="font-display text-base sm:text-lg font-bold text-hub-text-primary group-hover:underline">
-                  {profile.followingCount ?? 0}
-                </span>
-                <span className="text-[10px] text-hub-text-tertiary uppercase tracking-wider font-semibold group-hover:text-hub-text-primary">Following</span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-wrap items-center gap-2 pt-2">
-              {isOwnProfile ? (
-                <>
+              {/* Action Buttons */}
+              <div className="flex items-center justify-center sm:justify-end gap-2">
+                {isOwnProfile ? (
                   <Button 
-                    variant="secondary"
-                    size="sm"
+                    variant="secondary" 
+                    size="sm" 
                     onClick={() => setEditModalOpen(true)}
                     icon={Settings}
                   >
                     Edit Profile
                   </Button>
+                ) : (
+                  <>
+                    <Button 
+                      variant={isFollowing ? 'secondary' : 'primary'} 
+                      size="sm" 
+                      onClick={handleFollowToggle}
+                      isLoading={followLoading}
+                      icon={isFollowing ? UserMinus : UserPlus}
+                    >
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </Button>
+                    <Button 
+                      variant="secondary" 
+                      size="sm" 
+                      onClick={() => navigate(`/messages?user=${profile._id}`)}
+                      icon={MessageSquare}
+                    >
+                      Message
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
 
-                  <Button 
-                    variant="primary"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadingAvatar}
-                    icon={Upload}
-                  >
-                    {profile.avatar ? 'Change Photo' : 'Upload Photo'}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button 
-                    variant={isFollowing ? 'secondary' : 'primary'}
-                    size="sm"
-                    onClick={handleFollowToggle}
-                    disabled={followLoading}
-                    icon={isFollowing ? UserMinus : UserPlus}
-                  >
-                    {isFollowing ? 'Following' : 'Follow'}
-                  </Button>
+            {/* Bio */}
+            {profile.bio && (
+              <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed max-w-xl">
+                {profile.bio}
+              </p>
+            )}
 
-                  <Button 
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => navigate('/messages')}
-                    icon={MessageSquare}
-                  >
-                    Message
-                  </Button>
-                </>
-              )}
+            {/* Statistics */}
+            <div className="flex items-center justify-center sm:justify-start gap-6 pt-2 border-t border-[var(--border)]/60 text-xs">
+              <div>
+                <span className="font-bold text-[var(--text-primary)] text-sm">{profile.postsCount || posts.length}</span>
+                <span className="text-[var(--text-tertiary)] ml-1.5">Moments</span>
+              </div>
+              <div>
+                <span className="font-bold text-[var(--text-primary)] text-sm">{profile.followersCount || 0}</span>
+                <span className="text-[var(--text-tertiary)] ml-1.5">Followers</span>
+              </div>
+              <div>
+                <span className="font-bold text-[var(--text-primary)] text-sm">{profile.followingCount || 0}</span>
+                <span className="text-[var(--text-tertiary)] ml-1.5">Following</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-hub-border pb-px mb-6">
-        <button 
+      {/* Profile Tabs */}
+      <div className="flex items-center justify-center border-b border-[var(--border)]">
+        <button
           onClick={() => setActiveTab('posts')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
-            activeTab === 'posts' 
-              ? 'border-hub-accent text-hub-accent' 
-              : 'border-transparent text-hub-text-tertiary hover:text-hub-text-primary'
+          className={`flex items-center gap-2 px-6 py-3 border-b-2 text-xs font-bold transition-all ${
+            activeTab === 'posts'
+              ? 'border-[var(--accent)] text-[var(--accent)]'
+              : 'border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
           }`}
         >
-          <Activity className="w-4 h-4" />
-          Posts ({posts.length})
+          <Grid className="w-4 h-4" /> Moments ({posts.length})
         </button>
 
         {isOwnProfile && (
-          <button 
+          <button
             onClick={() => setActiveTab('saved')}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
-              activeTab === 'saved' 
-                ? 'border-hub-accent text-hub-accent' 
-                : 'border-transparent text-hub-text-tertiary hover:text-hub-text-primary'
+            className={`flex items-center gap-2 px-6 py-3 border-b-2 text-xs font-bold transition-all ${
+              activeTab === 'saved'
+                ? 'border-[var(--accent)] text-[var(--accent)]'
+                : 'border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
             }`}
           >
-            <Bookmark className="w-4 h-4" />
-            Saved ({savedPosts.length})
+            <Bookmark className="w-4 h-4" /> Bookmarks ({savedPosts.length})
           </button>
         )}
       </div>
 
-      {/* Tab Contents */}
+      {/* Tab Content */}
       {activeTab === 'posts' && (
-        <div className="space-y-4 max-w-xl mx-auto">
+        <div>
           {posts.length > 0 ? (
-            posts.map((post) => (
-              <PostCard 
-                key={post._id} 
-                post={{
-                  ...post,
-                  author: {
-                    _id: profile._id,
-                    username: profile.username,
-                    displayName: profile.displayName,
-                    avatar: profile.avatar
-                  }
-                }} 
-                onUpdate={fetchUserProfile}
-              />
-            ))
+            <div className="max-w-xl mx-auto space-y-4">
+              {posts.map(post => (
+                <PostCard 
+                  key={post._id} 
+                  post={post} 
+                  onUpdate={fetchUserProfile}
+                />
+              ))}
+            </div>
           ) : (
             <EmptyState 
-              icon={Activity}
-              title="No Posts Yet"
-              description={isOwnProfile 
-                ? 'You have not shared any posts yet.'
-                : `@${profile.username} has not posted anything yet.`}
-              actionLabel={isOwnProfile ? "Share Your First Post" : undefined}
-              onAction={isOwnProfile ? () => navigate('/feed') : undefined}
+              icon={Sparkles}
+              title="No Moments Yet"
+              description={isOwnProfile ? "You haven't shared any moments yet. Capture and share your first moment!" : `@${profile.username} hasn't shared any moments yet.`}
             />
           )}
         </div>
       )}
 
-      {activeTab === 'saved' && isOwnProfile && (
-        <div className="space-y-4 max-w-xl mx-auto">
+      {activeTab === 'saved' && (
+        <div>
           {savedPosts.length > 0 ? (
-            savedPosts.map((post) => (
-              <PostCard 
-                key={post._id} 
-                post={post} 
-                onUpdate={() => {
-                  fetchSavedPosts();
-                  fetchUserProfile();
-                }}
-              />
-            ))
+            <div className="max-w-xl mx-auto space-y-4">
+              {savedPosts.map(post => (
+                <PostCard 
+                  key={post._id} 
+                  post={post} 
+                  onUpdate={fetchSavedPosts}
+                />
+              ))}
+            </div>
           ) : (
             <EmptyState 
               icon={Bookmark}
-              title="No Saved Posts"
-              description="Click the bookmark icon on any post to save it to your private library."
-              actionLabel="Explore Feed"
-              onAction={() => navigate('/feed')}
+              title="No Saved Moments"
+              description="Tap the bookmark button on any post to save it for later."
             />
           )}
         </div>
       )}
 
       {/* Edit Profile Modal */}
-      <Modal
-        isOpen={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
-        title="Edit Profile"
-        description="Update your public profile details."
-      >
-        <form onSubmit={handleSaveProfile} className="space-y-4">
-          <Input 
-            label="Display Name"
-            value={editForm.displayName}
-            onChange={(e) => setEditForm(prev => ({ ...prev, displayName: e.target.value }))}
-            placeholder="Your name"
-          />
-
-          <Textarea 
-            label="Bio"
-            rows={3}
-            value={editForm.bio}
-            onChange={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
-            placeholder="Tell people about yourself..."
-          />
-
-          <Input 
-            label="Avatar URL (or upload photo above)"
-            value={editForm.avatar}
-            onChange={(e) => setEditForm(prev => ({ ...prev, avatar: e.target.value }))}
-            placeholder="/api/uploads/... or image URL"
-          />
-
-          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-hub-surface-elevated border border-hub-border">
-            <div className="flex items-center gap-2.5">
-              <Lock className="w-4 h-4 text-hub-accent" />
-              <div>
-                <p className="text-xs font-bold text-hub-text-primary">Private Account</p>
-                <p className="text-[11px] text-hub-text-tertiary">Require approval before people can follow you</p>
-              </div>
-            </div>
-            <input 
-              type="checkbox"
-              checked={editForm.isPrivate}
-              onChange={(e) => setEditForm(prev => ({ ...prev, isPrivate: e.target.checked }))}
-              className="w-4 h-4 accent-hub-accent rounded cursor-pointer"
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-hub-border">
-            <Button 
-              type="button" 
-              variant="ghost"
-              size="md"
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl relative">
+            <button
               onClick={() => setEditModalOpen(false)}
+              className="absolute top-4 right-4 p-1 rounded-xl text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)]"
             >
-              Cancel
-            </Button>
-            <Button 
-              type="submit"
-              variant="primary"
-              size="md"
-              isLoading={savingEdit}
-            >
-              Save Changes
-            </Button>
-          </div>
-        </form>
-      </Modal>
+              <X className="w-4 h-4" />
+            </button>
 
-      {/* Followers / Following Modal */}
-      <Modal
-        isOpen={followersModalOpen}
-        onClose={() => setFollowersModalOpen(false)}
-        title={modalTitle}
-      >
-        <div className="max-h-80 overflow-y-auto space-y-1.5 divide-y divide-hub-border">
-          {modalUsersList.length > 0 ? (
-            modalUsersList.map(u => (
-              <div 
-                key={u._id}
-                onClick={() => {
-                  setFollowersModalOpen(false);
-                  navigate(`/u/${u.username}`);
-                }}
-                className="flex items-center justify-between p-2 rounded-2xl hover:bg-hub-surface-elevated cursor-pointer transition-colors"
-              >
-                <div className="flex items-center gap-2.5">
-                  <UserAvatar 
-                    src={u.avatar} 
-                    name={u.displayName || u.username} 
-                    size="sm" 
-                  />
-                  <div>
-                    <p className="text-xs font-bold text-hub-text-primary">{u.displayName || u.username}</p>
-                    <p className="text-[11px] text-hub-text-tertiary">@{u.username}</p>
-                  </div>
-                </div>
+            <h3 className="font-display text-lg font-bold text-[var(--text-primary)] mb-4">
+              Edit Profile
+            </h3>
+
+            <form onSubmit={handleSaveProfile} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-[var(--text-secondary)] block mb-1.5">
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  value={editForm.displayName}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, displayName: e.target.value }))}
+                  className="w-full bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--text-primary)] rounded-xl p-2.5 outline-none focus:border-[var(--accent)]"
+                  placeholder="Your Name"
+                />
               </div>
-            ))
-          ) : (
-            <p className="text-xs text-hub-text-tertiary text-center py-6">No users in this list yet.</p>
-          )}
+
+              <div>
+                <label className="text-xs font-semibold text-[var(--text-secondary)] block mb-1.5">
+                  Bio
+                </label>
+                <textarea
+                  rows={3}
+                  value={editForm.bio}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
+                  className="w-full bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--text-primary)] rounded-xl p-2.5 outline-none focus:border-[var(--accent)] resize-none"
+                  placeholder="Write a short bio about yourself..."
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
+                <Button 
+                  variant="ghost" 
+                  size="md" 
+                  type="button" 
+                  onClick={() => setEditModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="primary" 
+                  size="md" 
+                  type="submit" 
+                  isLoading={savingEdit}
+                >
+                  Save Changes
+                </Button>
+              </div>
+            </form>
+          </div>
         </div>
-      </Modal>
+      )}
     </div>
   );
 }

@@ -5,45 +5,33 @@ const communitySchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
-    maxlength: 50
+    maxlength: 60
   },
   slug: {
     type: String,
     required: true,
     unique: true,
     lowercase: true,
-    index: true,
-    trim: true
+    trim: true,
+    index: true
   },
   description: {
     type: String,
-    required: true,
-    maxlength: 500
+    maxlength: 500,
+    default: ''
+  },
+  icon: {
+    type: String,
+    default: ''
+  },
+  banner: {
+    type: String,
+    default: ''
   },
   creator: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
-  },
-  moderators: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  members: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: []
-  }],
-  rules: [{
-    type: String
-  }],
-  bannerUrl: {
-    type: String,
-    default: ''
-  },
-  iconUrl: {
-    type: String,
-    default: ''
   },
   memberCount: {
     type: Number,
@@ -52,10 +40,14 @@ const communitySchema = new mongoose.Schema({
   postCount: {
     type: Number,
     default: 0
+  },
+  category: {
+    type: String,
+    default: 'General'
   }
 }, { timestamps: true });
 
 communitySchema.index({ slug: 1 });
-communitySchema.index({ members: 1 });
+communitySchema.index({ memberCount: -1 });
 
 export default mongoose.model('Community', communitySchema);

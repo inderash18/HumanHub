@@ -14,11 +14,12 @@ connectDB();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: [
-        process.env.FRONTEND_URL || 'http://localhost',
-        'http://localhost:3000',
-        'http://localhost:3001'
-    ],
+    origin: (origin, callback) => {
+      if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || origin.startsWith('http://192.168.') || origin.startsWith('http://10.') || origin.startsWith('http://172.')) {
+        return callback(null, true);
+      }
+      callback(null, true);
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   }

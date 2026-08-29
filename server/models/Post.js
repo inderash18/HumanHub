@@ -1,10 +1,10 @@
 import mongoose from 'mongoose';
 
 const postSchema = new mongoose.Schema({
-  title: {
+  caption: {
     type: String,
     trim: true,
-    maxlength: 300,
+    maxlength: 2200,
     default: ''
   },
   body: {
@@ -26,56 +26,39 @@ const postSchema = new mongoose.Schema({
   mediaUrls: [{
     type: String
   }],
+  mediaType: {
+    type: String,
+    enum: ['text', 'image', 'video', 'mixed'],
+    default: 'text'
+  },
   status: {
     type: String,
-    enum: ['pending', 'published', 'rejected', 'removed'],
+    enum: ['published', 'pending_review', 'blocked'],
     default: 'published',
     index: true
   },
-  upvotes: {
+  likesCount: {
     type: Number,
     default: 0
   },
-  downvotes: {
+  commentsCount: {
     type: Number,
     default: 0
   },
-  hotScore: {
-    type: Number,
-    default: 0,
-    index: true
-  },
-  detectionScores: {
-    text: {
-      score: { type: Number, default: 0 },
-      isAI: { type: Boolean, default: false },
-      confidence: { type: Number, default: 0 }
-    },
-    image: {
-      score: { type: Number, default: 0 },
-      isAI: { type: Boolean, default: false },
-      confidence: { type: Number, default: 0 }
-    },
-    video: {
-      score: { type: Number, default: 0 },
-      isAI: { type: Boolean, default: false },
-      confidence: { type: Number, default: 0 }
-    },
-    bot: {
-      score: { type: Number, default: 0 },
-      isBotLikely: { type: Boolean, default: false },
-      confidence: { type: Number, default: 0 }
-    }
-  },
-  reportCount: {
+  savesCount: {
     type: Number,
     default: 0
-  }
+  },
+  tags: [{
+    type: String,
+    trim: true,
+    lowercase: true
+  }]
 }, { timestamps: true });
 
 postSchema.index({ author: 1, createdAt: -1 });
 postSchema.index({ community: 1, createdAt: -1 });
-postSchema.index({ status: 1, hotScore: -1 });
-postSchema.index({ createdAt: -1 });
+postSchema.index({ status: 1, createdAt: -1 });
+postSchema.index({ tags: 1 });
 
 export default mongoose.model('Post', postSchema);

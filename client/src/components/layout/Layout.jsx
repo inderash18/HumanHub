@@ -1,13 +1,16 @@
 import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { useAuthStore } from '../../store/useAuthStore';
 import Sidebar from './Sidebar';
 import MobileBottomNav from './MobileBottomNav';
 
 export default function Layout() {
   const location = useLocation();
+  const { isAuthenticated } = useAuthStore();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
+  const isLandingPage = !isAuthenticated && location.pathname === '/';
 
-  if (isAuthPage) {
+  if (isAuthPage || isLandingPage) {
     return <Outlet />;
   }
 

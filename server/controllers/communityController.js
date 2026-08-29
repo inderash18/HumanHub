@@ -1,79 +1,104 @@
 import asyncHandler from '../utils/asyncHandler.js';
 import Community from '../models/Community.js';
+import CommunityMember from '../models/CommunityMember.js';
+import Post from '../models/Post.js';
 
 // @desc    Create new community
 // @route   POST /api/communities
 // @access  Private
 export const createCommunity = asyncHandler(async (req, res) => {
-  const { name, slug, description, rules } = req.body;
+  const { name, slug, description, category, icon, banner } = req.body;
 
-  if (!name || !slug || !description) {
+  if (!name || !description) {
     res.status(400);
-    throw new Error('Name, slug, and description are required');
+    throw new Error('Name and description are required');
   }
 
-  const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
-  const existing = await Community.findOne({ slug: cleanSlug });
+  const generatedSlug = (slug || name).trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-');
+  const existing = await Community.findOne({ slug: generatedSlug });
   if (existing) {
     res.status(400);
-    throw new Error('Community slug already taken');
+    throw new Error('A community with this slug already exists');
   }
 
   const community = await Community.create({
     name: name.trim(),
-    slug: cleanSlug,
+    slug: generatedSlug,
     description: description.trim(),
-    rules: rules || [],
+    category: category || 'General',
+    icon: icon || '',
+    banner: banner || '',
     creator: req.user._id,
-    moderators: [req.user._id],
-    members: [req.user._id],
     memberCount: 1
   });
 
-  res.status(201).json(community);
+  await CommunityMember.create({
+    user: req.user._id,
+    community: community._id,
+    role: 'admin'
+  });
+
+  res.status(201).json({
+    success: true,
+    community: {
+      ...community.toObject(),
+      isJoined: true
+    },
+    message: 'Community created successfully'
+  });
 });
 
 // @desc    Get all communities
 // @route   GET /api/communities
-// @access  Public
+// @access  Public (Optional Auth)
 export const getCommunities = asyncHandler(async (req, res) => {
   const communities = await Community.find()
+    .populate('creator', 'username displayName avatar')
     .sort({ memberCount: -1 });
 
-  const formatted = communities.map(c => {
-    const isJoined = req.user ? (c.members || []).some(m => m.toString() === req.user._id.toString()) : false;
-    return {
-      ...c.toObject(),
-      memberCount: c.members?.length || c.memberCount || 1,
-      isJoined
-    };
-  });
+  let joinedSet = new Set();
+  if (req.user) {
+    const memberships = await CommunityMember.find({ user: req.user._id });
+    memberships.forEach(m => joinedSet.add(m.community.toString()));
+  }
 
-  res.json(formatted);
+  const formatted = communities.map(c => ({
+    ...c.toObject(),
+    isJoined: joinedSet.has(c._id.toString())
+  }));
+
+  res.status(200).json(formatted);
 });
 
-// @desc    Get community by slug
+// @desc    Get single community by slug
 // @route   GET /api/communities/:slug
 // @access  Public (Optional Auth)
 export const getCommunityBySlug = asyncHandler(async (req, res) => {
   const community = await Community.findOne({ slug: req.params.slug.toLowerCase() })
-    .populate('moderators', 'username displayName avatar');
+    .populate('creator', 'username displayName avatar');
 
   if (!community) {
     res.status(404);
     throw new Error('Community not found');
   }
 
-  const isJoined = req.user ? (community.members || []).some(m => m.toString() === req.user._id.toString()) : false;
+  let isJoined = false;
+  if (req.user) {
+    const membership = await CommunityMember.findOne({ user: req.user._id, community: community._id });
+    isJoined = !!membership;
+  }
 
-  res.json({
+  // Fetch real community posts count
+  const postCount = await Post.countDocuments({ community: community._id, status: 'published' });
+
+  res.status(200).json({
     ...community.toObject(),
-    memberCount: community.members?.length || community.memberCount || 1,
+    postCount,
     isJoined
   });
 });
 
-// @desc    Join / Leave community toggle
+// @desc    Join or Leave a community
 // @route   POST /api/communities/:slug/join
 // @access  Private
 export const joinCommunity = asyncHandler(async (req, res) => {
@@ -84,53 +109,25 @@ export const joinCommunity = asyncHandler(async (req, res) => {
     throw new Error('Community not found');
   }
 
-  if (!community.members) community.members = [];
+  const existingMember = await CommunityMember.findOne({ user: req.user._id, community: community._id });
+  let isJoined = false;
 
-  const userIdStr = req.user._id.toString();
-  const isMember = community.members.some(id => id.toString() === userIdStr);
-
-  if (isMember) {
-    // Leave community
-    community.members = community.members.filter(id => id.toString() !== userIdStr);
+  if (existingMember) {
+    await CommunityMember.deleteOne({ _id: existingMember._id });
+    community.memberCount = Math.max(0, (community.memberCount || 0) - 1);
+    isJoined = false;
   } else {
-    // Join community
-    community.members.push(req.user._id);
+    await CommunityMember.create({ user: req.user._id, community: community._id });
+    community.memberCount = (community.memberCount || 0) + 1;
+    isJoined = true;
   }
 
-  community.memberCount = community.members.length;
   await community.save();
 
-  res.json({
+  res.status(200).json({
     success: true,
-    isJoined: !isMember,
+    isJoined,
     memberCount: community.memberCount,
-    message: !isMember ? `Joined c/${community.slug}` : `Left c/${community.slug}`
+    message: isJoined ? `Joined c/${community.slug}` : `Left c/${community.slug}`
   });
-});
-
-// @desc    Update community settings
-// @route   PUT /api/communities/:slug
-// @access  Private/Moderator
-export const updateCommunity = asyncHandler(async (req, res) => {
-  const community = await Community.findOne({ slug: req.params.slug.toLowerCase() });
-
-  if (!community) {
-    res.status(404);
-    throw new Error('Community not found');
-  }
-
-  const isMod = community.moderators.some(id => id.toString() === req.user._id.toString()) || req.user.role === 'admin';
-  if (!isMod) {
-    res.status(403);
-    throw new Error('Not authorized to update this community');
-  }
-
-  if (req.body.name) community.name = req.body.name.trim();
-  if (req.body.description) community.description = req.body.description.trim();
-  if (req.body.rules) community.rules = req.body.rules;
-  if (req.body.iconUrl) community.iconUrl = req.body.iconUrl;
-  if (req.body.bannerUrl) community.bannerUrl = req.body.bannerUrl;
-
-  await community.save();
-  res.json(community);
 });

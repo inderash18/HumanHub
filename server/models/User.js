@@ -7,7 +7,8 @@ const userSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     minlength: 3,
-    maxlength: 30
+    maxlength: 30,
+    lowercase: true
   },
   displayName: {
     type: String,
@@ -31,19 +32,9 @@ const userSchema = new mongoose.Schema({
     enum: ['user', 'moderator', 'admin'],
     default: 'user'
   },
-  trustScore: {
-    type: Number,
-    default: 0.95,
-    min: 0.0,
-    max: 1.0
-  },
-  isVerified: {
-    type: Boolean,
-    default: true
-  },
   emailVerified: {
     type: Boolean,
-    default: true
+    default: false
   },
   isBanned: {
     type: Boolean,
@@ -58,32 +49,26 @@ const userSchema = new mongoose.Schema({
     maxlength: 300,
     default: ''
   },
-  followers: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: []
-  }],
-  following: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: []
-  }],
-  savedPosts: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Post',
-    default: []
-  }],
+  followersCount: {
+    type: Number,
+    default: 0
+  },
+  followingCount: {
+    type: Number,
+    default: 0
+  },
+  postsCount: {
+    type: Number,
+    default: 0
+  },
   privacySettings: {
     isPrivate: { type: Boolean, default: false },
-    hideActivity: { type: Boolean, default: false },
     allowDirectMessages: { type: Boolean, default: true }
   }
 }, { timestamps: true });
 
 userSchema.index({ username: 1 });
 userSchema.index({ email: 1 });
-userSchema.index({ followers: 1 });
-userSchema.index({ following: 1 });
+userSchema.index({ createdAt: -1 });
 
 export default mongoose.model('User', userSchema);
-

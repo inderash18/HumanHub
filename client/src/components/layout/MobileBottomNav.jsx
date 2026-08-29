@@ -42,7 +42,7 @@ export default function MobileBottomNav() {
 
         <button 
           onClick={() => {
-            if (!isAuthenticated) navigate('/login');
+            if (!isAuthenticated) navigate('/?mode=signin');
             else setIsCreateOpen(true);
           }} 
           className="p-2 rounded-xl bg-hub-accent text-white shadow-md active:scale-95 transition-transform"
@@ -72,7 +72,7 @@ export default function MobileBottomNav() {
         </NavLink>
 
         <NavLink 
-          to={user ? `/u/${user.username}` : '/login'} 
+          to={user ? `/u/${user.username}` : '/?mode=signin'} 
           className="p-1 flex items-center justify-center"
           title="My Profile"
         >

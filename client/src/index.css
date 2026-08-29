@@ -7,21 +7,21 @@
 :root {
   color-scheme: dark;
 
-  /* HumanHub Design System — Dark-First Palette */
-  --background: #0B1120;
-  --surface: #111C2E;
-  --surface-elevated: #17263D;
-  --surface-muted: #1E314B;
+  /* HumanHub Design System — True Black & Deep Slate Dark-First Palette */
+  --background: #000000;
+  --surface: #0A0F1D;
+  --surface-elevated: #10182B;
+  --surface-muted: #17233B;
 
-  --border: #2A3D57;
-  --border-subtle: #20324A;
+  --border: #1E293B;
+  --border-subtle: #131D2E;
 
-  --text-primary: #F7FAFC;
-  --text-secondary: #B6C4D6;
-  --text-tertiary: #7F91A8;
+  --text-primary: #FFFFFF;
+  --text-secondary: #94A3B8;
+  --text-tertiary: #64748B;
 
   --accent: #F06E5C;
-  --accent-hover: #DB5848;
+  --accent-hover: #E05947;
 
   --cyan: #2EC4D6;
   --violet: #8B7CF6;
@@ -29,7 +29,7 @@
   --success: #3BC78A;
   --warning: #F0B44D;
   --danger: #EF5B5B;
-  --focus-ring: #66D9E8;
+  --focus-ring: #F06E5C;
 
   /* Aliases for semantic mapping */
   --hub-bg: var(--background);

@@ -2,140 +2,139 @@ import mongoose from 'mongoose';
 import asyncHandler from '../utils/asyncHandler.js';
 import Post from '../models/Post.js';
 import User from '../models/User.js';
-import Vote from '../models/Vote.js';
-import redis from '../config/redis.js';
+import Like from '../models/Like.js';
+import SavedPost from '../models/SavedPost.js';
+import Notification from '../models/Notification.js';
+import Community from '../models/Community.js';
 
 // @desc    Create a new post
 // @route   POST /api/posts
 // @access  Private
 export const createPost = asyncHandler(async (req, res) => {
-  const { title, body, communityId, mediaUrls } = req.body;
+  const { caption, body, communityId, mediaUrls, tags } = req.body;
 
-  let assignedCommunityId = null;
-  const Community = (await import('../models/Community.js')).default;
+  const contentText = (caption || body || '').trim();
+  const mediaList = Array.isArray(mediaUrls) ? mediaUrls : (mediaUrls ? [mediaUrls] : []);
 
+  if (!contentText && mediaList.length === 0) {
+    res.status(400);
+    throw new Error('Please provide text or media for your post');
+  }
+
+  let assignedCommunity = null;
   if (communityId && mongoose.Types.ObjectId.isValid(communityId)) {
-    const existing = await Community.findById(communityId);
-    if (existing) assignedCommunityId = existing._id;
-  }
-
-  if (!assignedCommunityId) {
-    let generalCommunity = await Community.findOne({ slug: 'general' });
-    if (!generalCommunity) {
-      generalCommunity = await Community.create({
-        name: 'General',
-        slug: 'general',
-        description: 'General human discussions on HumanHub.',
-        creator: req.user._id,
-        moderators: [req.user._id]
-      });
+    const comm = await Community.findById(communityId);
+    if (comm) {
+      assignedCommunity = comm._id;
+      comm.postCount = (comm.postCount || 0) + 1;
+      await comm.save();
     }
-    assignedCommunityId = generalCommunity._id;
   }
 
-  // 1. Save post with status published
+  // Extract hashtags if present
+  const extractedTags = tags || (contentText.match(/#[a-zA-Z0-9_]+/g) || []).map(t => t.slice(1).toLowerCase());
+
+  // Determine media type
+  let mediaType = 'text';
+  if (mediaList.length > 0) {
+    const isVideo = mediaList.some(url => url.endsWith('.mp4') || url.endsWith('.webm'));
+    mediaType = isVideo ? 'video' : 'image';
+  }
+
   const post = await Post.create({
-    title: title?.trim() || '',
-    body: body || '',
+    caption: contentText,
+    body: contentText,
     author: req.user._id,
-    community: assignedCommunityId,
-    mediaUrls: mediaUrls || [],
-    status: 'published',
-    hotScore: 100,
-    detectionScores: {
-      text: { score: 0.02, isAI: false, confidence: 0.98 },
-      image: { score: 0.01, isAI: false, confidence: 0.99 },
-      bot: { score: 0.02, isBotLikely: false, confidence: 0.98 }
-    }
+    community: assignedCommunity,
+    mediaUrls: mediaList,
+    mediaType,
+    tags: extractedTags,
+    status: 'published'
   });
 
-  // 2. Push job to Redis queue for moderation if Redis is connected
-  try {
-    await redis.lpush('moderation:queue', JSON.stringify({
-      postId: post._id,
-      type: 'post',
-      authorId: req.user._id,
-      content: { title: post.title, body: post.body, mediaUrls: post.mediaUrls }
-    }));
-  } catch (redisErr) {
-    console.log('[Redis Queue Notice] Redis queue skipped or offline');
-  }
+  // Increment user's post count
+  await User.findByIdAndUpdate(req.user._id, { $inc: { postsCount: 1 } });
+
+  const populatedPost = await Post.findById(post._id)
+    .populate('author', 'username displayName avatar bio')
+    .populate('community', 'name slug icon');
 
   res.status(201).json({
     success: true,
-    message: 'Post submitted successfully. Verification in progress.',
-    _id: post._id,
     post: {
-      ...post.toObject(),
-      userVote: 0,
-      isLiked: false,
+      ...populatedPost.toObject(),
       hasLiked: false,
       isSaved: false
     },
-    ...post.toObject()
+    message: 'Post published successfully'
   });
 });
 
-// @desc    Get all posts (Feed)
+// @desc    Get feed posts (Public with optional auth)
 // @route   GET /api/posts
 // @access  Public (Optional Auth)
 export const getPosts = asyncHandler(async (req, res) => {
-  const limit = parseInt(req.query.limit, 10) || 25;
-  const cursor = req.query.cursor;
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 20;
+  const skip = (page - 1) * limit;
+
   const query = { status: 'published' };
 
-  if (cursor) {
-    query.hotScore = { $lt: parseFloat(cursor) };
-  }
-
-  // Filter by community
   if (req.query.community) {
-    query.community = req.query.community;
-  }
-
-  const posts = await Post.find(query)
-    .populate('author', 'username displayName avatar trustScore isVerified')
-    .populate('community', 'name slug iconUrl')
-    .sort({ hotScore: -1 })
-    .limit(limit);
-
-  // Fetch votes & saved status dynamically if user is logged in
-  let userVotesMap = new Map();
-  let userSavedSet = new Set();
-
-  if (req.user && posts.length > 0) {
-    const postIds = posts.map(p => p._id);
-    const votes = await Vote.find({
-      user: req.user._id,
-      targetType: 'post',
-      targetId: { $in: postIds }
-    });
-    votes.forEach(v => {
-      userVotesMap.set(v.targetId.toString(), v.value);
-    });
-
-    const userRecord = await User.findById(req.user._id).select('savedPosts');
-    if (userRecord?.savedPosts) {
-      userRecord.savedPosts.forEach(id => userSavedSet.add(id.toString()));
+    if (mongoose.Types.ObjectId.isValid(req.query.community)) {
+      query.community = req.query.community;
+    } else {
+      const comm = await Community.findOne({ slug: req.query.community.toLowerCase() });
+      if (comm) query.community = comm._id;
     }
   }
 
-  const formattedPosts = posts.map(p => {
-    const postObj = p.toObject();
-    const voteVal = userVotesMap.get(p._id.toString()) || 0;
-    const isSaved = userSavedSet.has(p._id.toString());
+  if (req.query.tag) {
+    query.tags = req.query.tag.toLowerCase();
+  }
+
+  const [posts, total] = await Promise.all([
+    Post.find(query)
+      .populate('author', 'username displayName avatar bio')
+      .populate('community', 'name slug icon')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    Post.countDocuments(query)
+  ]);
+
+  // Check liked & saved status for logged-in user
+  let likedPostIds = new Set();
+  let savedPostIds = new Set();
+
+  if (req.user && posts.length > 0) {
+    const postIds = posts.map(p => p._id);
+    const [likes, saves] = await Promise.all([
+      Like.find({ user: req.user._id, post: { $in: postIds } }),
+      SavedPost.find({ user: req.user._id, post: { $in: postIds } })
+    ]);
+    likes.forEach(l => likedPostIds.add(l.post.toString()));
+    saves.forEach(s => savedPostIds.add(s.post.toString()));
+  }
+
+  const formattedPosts = posts.map(post => {
+    const postObj = post.toObject();
+    const idStr = post._id.toString();
     return {
       ...postObj,
-      userVote: voteVal,
-      isLiked: voteVal === 1,
-      hasLiked: voteVal === 1,
-      isSaved
+      hasLiked: likedPostIds.has(idStr),
+      isLiked: likedPostIds.has(idStr),
+      isSaved: savedPostIds.has(idStr)
     };
   });
 
-  res.json({
+  res.status(200).json({
+    success: true,
     data: formattedPosts,
-    nextCursor: posts.length === limit ? posts[posts.length - 1].hotScore : null,
+    posts: formattedPosts,
+    total,
+    page,
+    hasMore: skip + posts.length < total
   });
 });
 
@@ -144,101 +143,143 @@ export const getPosts = asyncHandler(async (req, res) => {
 // @access  Public (Optional Auth)
 export const getPostById = asyncHandler(async (req, res) => {
   const post = await Post.findById(req.params.id)
-    .populate('author', 'username displayName avatar trustScore isVerified')
-    .populate('community', 'name slug rules');
+    .populate('author', 'username displayName avatar bio')
+    .populate('community', 'name slug icon description');
 
-  if (post) {
-    let userVote = 0;
-    let isSaved = false;
-
-    if (req.user) {
-      const vote = await Vote.findOne({
-        user: req.user._id,
-        targetId: post._id,
-        targetType: 'post'
-      });
-      if (vote) userVote = vote.value;
-
-      const userRecord = await User.findById(req.user._id).select('savedPosts');
-      if (userRecord?.savedPosts) {
-        isSaved = userRecord.savedPosts.some(id => id.toString() === post._id.toString());
-      }
-    }
-
-    const postObj = post.toObject();
-    res.json({
-      ...postObj,
-      userVote,
-      isLiked: userVote === 1,
-      hasLiked: userVote === 1,
-      isSaved
-    });
-  } else {
+  if (!post || post.status === 'blocked') {
     res.status(404);
     throw new Error('Post not found');
   }
+
+  let hasLiked = false;
+  let isSaved = false;
+
+  if (req.user) {
+    const [like, save] = await Promise.all([
+      Like.findOne({ user: req.user._id, post: post._id }),
+      SavedPost.findOne({ user: req.user._id, post: post._id })
+    ]);
+    hasLiked = !!like;
+    isSaved = !!save;
+  }
+
+  res.status(200).json({
+    success: true,
+    post: {
+      ...post.toObject(),
+      hasLiked,
+      isLiked: hasLiked,
+      isSaved
+    }
+  });
 });
 
-// @desc    Bookmark / Save / Unsave a post
+// @desc    Like or Unlike a post
+// @route   POST /api/posts/:id/like
+// @access  Private
+export const toggleLikePost = asyncHandler(async (req, res) => {
+  const postId = req.params.id;
+  const post = await Post.findById(postId);
+
+  if (!post) {
+    res.status(404);
+    throw new Error('Post not found');
+  }
+
+  const existingLike = await Like.findOne({ user: req.user._id, post: postId });
+  let hasLiked = false;
+
+  if (existingLike) {
+    await Like.deleteOne({ _id: existingLike._id });
+    post.likesCount = Math.max(0, (post.likesCount || 0) - 1);
+    hasLiked = false;
+  } else {
+    await Like.create({ user: req.user._id, post: postId });
+    post.likesCount = (post.likesCount || 0) + 1;
+    hasLiked = true;
+
+    // Trigger notification to author if someone else liked
+    if (post.author.toString() !== req.user._id.toString()) {
+      await Notification.create({
+        recipient: post.author,
+        sender: req.user._id,
+        type: 'like',
+        post: post._id,
+        text: 'liked your post.'
+      });
+    }
+  }
+
+  await post.save();
+
+  res.status(200).json({
+    success: true,
+    hasLiked,
+    isLiked: hasLiked,
+    likesCount: post.likesCount,
+    message: hasLiked ? 'Post liked' : 'Post unliked'
+  });
+});
+
+// @desc    Save or Unsave a post
 // @route   POST /api/posts/:id/save
 // @access  Private
 export const toggleSavePost = asyncHandler(async (req, res) => {
   const postId = req.params.id;
-  const user = await User.findById(req.user._id);
+  const post = await Post.findById(postId);
 
-  if (!user) {
+  if (!post) {
     res.status(404);
-    throw new Error('User not found');
+    throw new Error('Post not found');
   }
 
-  if (!user.savedPosts) user.savedPosts = [];
-
-  const postIndex = user.savedPosts.findIndex(id => id.toString() === postId);
+  const existingSave = await SavedPost.findOne({ user: req.user._id, post: postId });
   let isSaved = false;
 
-  if (postIndex > -1) {
-    user.savedPosts.splice(postIndex, 1);
+  if (existingSave) {
+    await SavedPost.deleteOne({ _id: existingSave._id });
+    post.savesCount = Math.max(0, (post.savesCount || 0) - 1);
     isSaved = false;
   } else {
-    user.savedPosts.push(postId);
+    await SavedPost.create({ user: req.user._id, post: postId });
+    post.savesCount = (post.savesCount || 0) + 1;
     isSaved = true;
   }
 
-  await user.save();
+  await post.save();
 
-  res.json({
+  res.status(200).json({
     success: true,
     isSaved,
-    savedCount: user.savedPosts.length,
+    savesCount: post.savesCount,
     message: isSaved ? 'Post saved to your bookmarks' : 'Post removed from your bookmarks'
   });
 });
 
-// @desc    Get user's saved bookmarked posts
+// @desc    Get user's saved posts
 // @route   GET /api/posts/saved
 // @access  Private
 export const getSavedPosts = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id)
+  const savedEntries = await SavedPost.find({ user: req.user._id })
     .populate({
-      path: 'savedPosts',
+      path: 'post',
       populate: [
-        { path: 'author', select: 'username displayName avatar trustScore isVerified' },
-        { path: 'community', select: 'name slug iconUrl' }
+        { path: 'author', select: 'username displayName avatar bio' },
+        { path: 'community', select: 'name slug icon' }
       ]
-    });
+    })
+    .sort({ createdAt: -1 });
 
-  if (!user) {
-    res.status(404);
-    throw new Error('User not found');
-  }
+  // Filter out any deleted posts
+  const posts = savedEntries
+    .filter(entry => entry.post && entry.post.status === 'published')
+    .map(entry => ({
+      ...entry.post.toObject(),
+      isSaved: true,
+      hasLiked: false
+    }));
 
-  const savedList = (user.savedPosts || []).map(p => ({
-    ...(p.toObject ? p.toObject() : p),
-    isSaved: true,
-    isLiked: false // Default; populated if needed
-  }));
-
-  res.json(savedList.reverse());
+  res.status(200).json(posts);
 });
 
 // @desc    Delete a post
@@ -252,20 +293,19 @@ export const deletePost = asyncHandler(async (req, res) => {
     throw new Error('Post not found');
   }
 
-  // Ensure author or moderator
-  if (post.author.toString() !== req.user._id.toString() && req.user.role !== 'moderator') {
+  // Ensure author or admin/moderator
+  if (post.author.toString() !== req.user._id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
     res.status(403);
-    throw new Error('User not authorized to delete this post');
+    throw new Error('You are not authorized to delete this post');
   }
 
-  await post.deleteOne();
-  res.json({ message: 'Post removed' });
-});
+  await Promise.all([
+    Post.deleteOne({ _id: post._id }),
+    Like.deleteMany({ post: post._id }),
+    SavedPost.deleteMany({ post: post._id }),
+    Notification.deleteMany({ post: post._id }),
+    User.findByIdAndUpdate(post.author, { $inc: { postsCount: -1 } })
+  ]);
 
-// @desc    Report Post
-// @route   POST /api/posts/:id/report
-// @access  Private
-export const reportPost = asyncHandler(async (req, res) => {
-    res.status(200).json({ message: 'Post reported' });
+  res.status(200).json({ success: true, message: 'Post deleted successfully' });
 });
-

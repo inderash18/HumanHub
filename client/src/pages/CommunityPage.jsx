@@ -12,13 +12,12 @@ import { toast } from 'react-hot-toast';
 import PostCard from '../components/posts/PostCard';
 import CreatePostModal from '../components/posts/CreatePostModal';
 import Button from '../components/ui/Button';
-import Badge from '../components/ui/Badge';
-import EmptyState from '../components/ui/EmptyState';
+import EmptyState from '../components/common/EmptyState';
 
 export default function CommunityPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
 
   const [community, setCommunity] = useState(null);
   const [posts, setPosts] = useState([]);
@@ -35,7 +34,7 @@ export default function CommunityPage() {
       setLoading(true);
       const [commRes, postsRes] = await Promise.all([
         api.get(`/communities/${slug}`).catch(() => ({ data: null })),
-        api.get('/posts').catch(() => ({ data: [] }))
+        api.get(`/posts?community=${slug}`).catch(() => ({ data: [] }))
       ]);
 
       const commData = commRes.data;
@@ -44,10 +43,8 @@ export default function CommunityPage() {
         setIsJoined(Boolean(commData.isJoined));
       }
 
-      // Filter posts belonging to this community
-      const allPosts = postsRes.data?.data || postsRes.data || [];
-      const commPosts = allPosts.filter(p => p.community?.slug === slug || p.community?.name?.toLowerCase() === slug?.toLowerCase());
-      setPosts(commPosts);
+      const postData = postsRes.data?.data || postsRes.data?.posts || postsRes.data || [];
+      setPosts(Array.isArray(postData) ? postData : []);
     } catch (err) {
       setCommunity(null);
     } finally {
@@ -57,7 +54,7 @@ export default function CommunityPage() {
 
   const handleJoinToggle = async () => {
     if (!isAuthenticated) {
-      return navigate('/login');
+      return navigate('/?mode=signin');
     }
     try {
       const res = await api.post(`/communities/${slug}/join`);
@@ -79,8 +76,8 @@ export default function CommunityPage() {
   if (loading) {
     return (
       <div className="w-full max-w-4xl mx-auto px-4 py-20 flex flex-col items-center justify-center select-none">
-        <Users className="w-10 h-10 text-hub-text-tertiary animate-pulse mb-3" />
-        <p className="text-xs text-hub-text-tertiary">Loading community...</p>
+        <Users className="w-10 h-10 text-[var(--text-tertiary)] animate-pulse mb-3" />
+        <p className="text-xs text-[var(--text-tertiary)]">Loading community...</p>
       </div>
     );
   }
@@ -100,35 +97,35 @@ export default function CommunityPage() {
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 select-none">
+    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 select-none space-y-6">
       {/* Back link */}
       <button
         onClick={() => navigate('/communities')}
-        className="flex items-center gap-1.5 text-xs text-hub-text-tertiary hover:text-hub-text-primary font-semibold mb-4 transition-colors"
+        className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] font-semibold transition-colors"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
         All Communities
       </button>
 
       {/* Community Banner & Header Card */}
-      <div className="p-6 sm:p-8 rounded-3xl bg-hub-surface border border-hub-border shadow-xl mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+      <div className="p-6 sm:p-8 rounded-3xl bg-[var(--surface)] border border-[var(--border)] shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-hub-surface-elevated border border-hub-border text-hub-violet flex items-center justify-center font-display font-extrabold text-2xl shadow-sm">
-            {community.name.charAt(0)}
+          <div className="w-14 h-14 rounded-2xl bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--violet)] flex items-center justify-center font-display font-extrabold text-2xl shadow-sm">
+            {community.name.slice(0, 2).toUpperCase()}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-display text-xl sm:text-2xl font-bold text-hub-text-primary tracking-tight">
+              <h1 className="font-display text-xl sm:text-2xl font-bold text-[var(--text-primary)] tracking-tight">
                 {community.name}
               </h1>
-              <Badge variant="violet" size="sm">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--surface-elevated)] text-[var(--violet)] border border-[var(--border)]">
                 c/{community.slug}
-              </Badge>
+              </span>
             </div>
-            <p className="text-xs text-hub-text-secondary max-w-lg mt-1 leading-relaxed">
+            <p className="text-xs text-[var(--text-secondary)] max-w-lg mt-1 leading-relaxed">
               {community.description || 'Welcome to this community.'}
             </p>
-            <p className="text-[11px] text-hub-text-tertiary mt-1">
+            <p className="text-[11px] text-[var(--text-tertiary)] mt-1">
               {community.memberCount || 1} members
             </p>
           </div>
@@ -151,46 +148,37 @@ export default function CommunityPage() {
               onClick={() => setIsCreateOpen(true)}
               icon={Plus}
             >
-              Create Post
+              Post to c/{community.slug}
             </Button>
           )}
         </div>
       </div>
 
-      {/* Posts Section */}
-      <div className="max-w-2xl mx-auto space-y-4">
-        <div className="flex items-center justify-between px-1 mb-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-hub-text-tertiary font-mono-code">
-            Posts ({posts.length})
-          </span>
-        </div>
-
+      {/* Community Feed */}
+      <div className="space-y-4">
         {posts.length > 0 ? (
           posts.map(post => (
             <PostCard 
-              key={post._id}
-              post={post}
+              key={post._id} 
+              post={post} 
               onUpdate={fetchCommunityData}
             />
           ))
         ) : (
-          <EmptyState 
+          <EmptyState
             icon={Users}
-            title={`No posts yet in c/${community.slug}`}
-            description={`Be the first to share a moment or start a discussion in c/${community.slug}.`}
-            actionLabel="Create Post"
-            onAction={() => {
-              if (!isAuthenticated) navigate('/login');
-              else setIsCreateOpen(true);
-            }}
+            title="No posts in this community yet"
+            description="Be the first to start a conversation in this space!"
+            actionLabel={isAuthenticated ? "Create Post" : undefined}
+            onAction={() => setIsCreateOpen(true)}
           />
         )}
       </div>
 
       {isCreateOpen && (
-        <CreatePostModal 
-          isOpen={isCreateOpen} 
-          onClose={() => setIsCreateOpen(false)} 
+        <CreatePostModal
+          isOpen={isCreateOpen}
+          onClose={() => setIsCreateOpen(false)}
           onPostCreated={fetchCommunityData}
           defaultCommunityId={community._id}
         />

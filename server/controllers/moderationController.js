@@ -1,80 +1,62 @@
 import asyncHandler from '../utils/asyncHandler.js';
 import Post from '../models/Post.js';
+import User from '../models/User.js';
+import Session from '../models/Session.js';
 import ModerationLog from '../models/ModerationLog.js';
+import { getIO } from '../socket/socketHandler.js';
 
-// @desc    Get moderation queue
-// @route   GET /api/moderation/queue
-// @access  Private/Moderator
 export const getQueue = asyncHandler(async (req, res) => {
-  // Find posts blocked by strict threshold or explicitly reported waiting for manual review
-  const queue = await Post.find({
-    status: 'pending' // Just a basic search, logic is more complex in production
-  })
-  .populate('author', 'username trustScore')
-  .sort({ createdAt: 1 })
-  .limit(20);
-
-  res.json(queue);
+  res.json(await Post.find({ status: 'pending_review' })
+    .populate('author', 'username').sort({ createdAt: 1 }).limit(20));
 });
 
-// @desc    Approve post or comment
-// @route   POST /api/moderation/:id/approve
-// @access  Private/Moderator
-export const approveItem = asyncHandler(async (req, res) => {
-  const post = await Post.findById(req.params.id);
-  if (!post) {
-      res.status(404); throw new Error('Not found');
-  }
-
-  post.status = 'published';
-  await post.save();
-
-  await ModerationLog.create({
-      moderator: req.user._id,
-      targetId: post._id,
-      targetType: 'post',
-      action: 'approve',
-      reason: 'Manual Overrule',
+function decide(status, action) {
+  return asyncHandler(async (req, res) => {
+    const post = await Post.findOneAndUpdate(
+      { _id: req.params.id, status: 'pending_review' },
+      { $set: { status, moderationError: '' } }, { new: true, runValidators: true }
+    );
+    if (!post) return res.status(409).json({ message: 'Post is missing or already reviewed.' });
+    await ModerationLog.create({
+      moderator: req.user._id, targetId: post._id, targetType: 'post', action,
+      reason: typeof req.body.reason === 'string' && req.body.reason.trim()
+        ? req.body.reason.trim().slice(0, 1000) : 'Manual moderator review',
       aiScoresAtTime: post.detectionScores
+    });
+    getIO()?.to('user_' + post.author).emit('post:verified', { postId: post._id, status });
+    res.json({ success: true, message: status === 'published' ? 'Post approved' : 'Post blocked' });
   });
+}
+export const approveItem = decide('published', 'approve');
+export const rejectItem = decide('blocked', 'reject');
 
-  res.json({ message: 'Item approved' });
-});
-
-// @desc    Reject / Block item
-// @route   POST /api/moderation/:id/reject
-// @access  Private/Moderator
-export const rejectItem = asyncHandler(async (req, res) => {
-  const { reason } = req.body;
-  const post = await Post.findById(req.params.id);
-  
-  if (!post) { res.status(404); throw new Error('Not found'); }
-
-  post.status = 'rejected';
-  await post.save();
-
-  await ModerationLog.create({
-      moderator: req.user._id,
-      targetId: post._id,
-      targetType: 'post',
-      action: 'reject',
-      reason: reason || 'Violation of human-only policy',
-      aiScoresAtTime: post.detectionScores
-  });
-
-  res.json({ message: 'Item rejected' });
-});
-
-// @desc    Ban User
-// @route   POST /api/moderation/ban/:userId
-// @access  Private/Moderator
 export const banUser = asyncHandler(async (req, res) => {
-    res.status(200).json({ message: "User banned" });
+  const user = await User.findById(req.params.userId);
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  if (String(user._id) === String(req.user._id) || user.role === 'admin' ||
+      req.user.role !== 'admin' && user.role === 'moderator') {
+    return res.status(403).json({ message: 'You cannot suspend this account.' });
+  }
+  user.isBanned = true;
+  await user.save();
+  await Session.updateMany({ user: user._id }, { $set: { revokedAt: new Date() } });
+  getIO()?.in('user_' + user._id).disconnectSockets(true);
+  await ModerationLog.create({
+    moderator: req.user._id, targetId: user._id, targetType: 'user',
+    action: 'ban', reason: 'Account suspended by moderator'
+  });
+  res.json({ success: true, message: 'Account suspended' });
 });
 
-// @desc    Get Mod Stats / Audit
-// @route   GET /api/moderation/stats
-// @access  Private/Admin
 export const getStats = asyncHandler(async (req, res) => {
-    res.status(200).json({ message: "Audits delivered" });
+  const [pending, blocked, published, bannedUsers] = await Promise.all([
+    Post.countDocuments({ status: 'pending_review' }), Post.countDocuments({ status: 'blocked' }),
+    Post.countDocuments({ status: 'published' }), User.countDocuments({ isBanned: true })
+  ]);
+  res.json({ pending, blocked, published, bannedUsers });
+});
+
+export const getAudit = asyncHandler(async (req, res) => {
+  res.json(await ModerationLog.find().sort({ createdAt: -1 }).limit(100)
+    .populate('moderator', 'username'));
 });

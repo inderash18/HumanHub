@@ -1,58 +1,30 @@
-import Message from '../models/Message.js';
+import { authenticateAccessToken } from '../services/sessionService.js';
+
+let ioInstance = null;
 
 export const initializeSockets = (io) => {
-  io.on('connection', (socket) => {
-    console.log(`[Socket] Connected: ${socket.id}`);
-
-    // Join personal notification/message channel
-    socket.on('join_user_channel', (userId) => {
-        socket.join(`user_${userId}`);
-        console.log(`[Socket] User ${userId} joined their personal channel.`);
-    });
-
-    // Real-time Chat Messaging Event Loop
-    socket.on('message:send', async (payload) => {
-      const { senderId, receiverId, text } = payload;
-      
-      try {
-        if (!senderId || !receiverId || !text) return;
-
-        // 1. Save message to database
-        const message = await Message.create({
-          sender: senderId,
-          receiver: receiverId,
-          text
-        });
-
-        // 2. Populate user metadata
-        await message.populate('sender', 'username avatar trustScore');
-        await message.populate('receiver', 'username avatar trustScore');
-
-        // 3. Emit in real-time to both recipient and sender channels
-        io.to(`user_${receiverId}`).emit('message:receive', message);
-        io.to(`user_${senderId}`).emit('message:sent', message);
-        
-        console.log(`[Socket Chat] Message sent from ${senderId} to ${receiverId}`);
-      } catch (err) {
-        console.error('[Socket Chat Error]', err);
-      }
-    });
-
-    socket.on('disconnect', () => {
-      console.log(`[Socket] Disconnected: ${socket.id}`);
-    });
+  io.use(async (socket, next) => {
+    try {
+      const { user, session } = await authenticateAccessToken(socket.handshake.auth?.token);
+      socket.data.userId = String(user._id);
+      socket.data.sessionId = String(session._id);
+      next();
+    } catch { next(new Error('Authentication required')); }
   });
-  
+
+  io.on('connection', (socket) => {
+    // Channel identity comes exclusively from the authenticated session.
+    socket.join('user_' + socket.data.userId);
+    socket.join('session_' + socket.data.sessionId);
+    // Disconnect as soon as the access token expires. The client refreshes and reconnects.
+    const encoded = socket.handshake.auth.token.split('.')[1];
+    const { exp } = JSON.parse(Buffer.from(encoded, 'base64url').toString());
+    const timer = setTimeout(() => socket.disconnect(true), Math.max(0, exp * 1000 - Date.now()));
+    socket.on('disconnect', () => clearTimeout(timer));
+    // Messages are created through the authenticated HTTP endpoint only.
+  });
   return io;
 };
 
-// Global Store
-let ioInstance = null;
-
-const socketHandler = (io) => {
-    ioInstance = initializeSockets(io);
-}
-
 export const getIO = () => ioInstance;
-
-export default socketHandler;
+export default function socketHandler(io) { ioInstance = initializeSockets(io); }

@@ -24,18 +24,7 @@ const createTransporter = () => {
     });
   }
 
-  // Development Fallback: Logs OTP cleanly in console
-  return {
-    sendMail: async (options) => {
-      console.log('====================================================');
-      console.log('📧 [DEV EMAIL DISPATCH]');
-      console.log(`To: ${options.to}`);
-      console.log(`Subject: ${options.subject}`);
-      console.log(`Body:\n${options.text || options.html}`);
-      console.log('====================================================');
-      return { messageId: 'dev-' + Date.now() };
-    }
-  };
+  return { sendMail: async () => { throw new Error('Email delivery is not configured.'); } };
 };
 
 const transporter = createTransporter();
@@ -75,3 +64,4 @@ export const sendOTPEmail = async (email, otp, type = 'register') => {
 };
 
 export default transporter;
+

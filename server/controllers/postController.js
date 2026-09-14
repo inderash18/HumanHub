@@ -1,3 +1,4 @@
+import redis from '../config/redis.js';
 import mongoose from 'mongoose';
 import asyncHandler from '../utils/asyncHandler.js';
 import Post from '../models/Post.js';
@@ -49,8 +50,15 @@ export const createPost = asyncHandler(async (req, res) => {
     mediaUrls: mediaList,
     mediaType,
     tags: extractedTags,
-    status: 'published'
+    status: 'pending_review'
   });
+
+  try {
+    await redis.lpush('moderation:queue', JSON.stringify({ postId: String(post._id) }));
+  } catch {
+    post.moderationError = 'Automatic detection unavailable. Awaiting moderator review.';
+    await post.save();
+  }
 
   // Increment user's post count
   await User.findByIdAndUpdate(req.user._id, { $inc: { postsCount: 1 } });
@@ -66,7 +74,7 @@ export const createPost = asyncHandler(async (req, res) => {
       hasLiked: false,
       isSaved: false
     },
-    message: 'Post published successfully'
+    message: 'Post submitted for review'
   });
 });
 
@@ -146,7 +154,9 @@ export const getPostById = asyncHandler(async (req, res) => {
     .populate('author', 'username displayName avatar bio')
     .populate('community', 'name slug icon description');
 
-  if (!post || post.status === 'blocked') {
+  if (!post || (post.status !== 'published' &&
+      String(post.author?._id) !== String(req.user?._id) &&
+      !['admin', 'moderator'].includes(req.user?.role))) {
     res.status(404);
     throw new Error('Post not found');
   }
@@ -309,3 +319,4 @@ export const deletePost = asyncHandler(async (req, res) => {
 
   res.status(200).json({ success: true, message: 'Post deleted successfully' });
 });
+

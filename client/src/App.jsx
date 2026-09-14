@@ -1,3 +1,4 @@
+import ModeratorDashboard from './pages/ModeratorDashboard';
 import { Routes, Route } from "react-router-dom";
 import { Toaster } from 'react-hot-toast';
 import Layout from "./components/layout/Layout";
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/p/:id" element={<PostDetailPage />} />
           <Route path="/u/:username" element={<UserProfilePage />} />
+          <Route path="/moderation" element={<ModeratorDashboard />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />

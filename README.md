@@ -1,6 +1,8 @@
 # 🌐 HumanHub
 
-> **Human-Only Social Platform** backed by an autonomous AI detection pipeline to combat bot farms, AI-generated spam, and deepfakes with real-time "Proof of Humanity" verification.
+> Social platform prototype with authenticated messaging and a moderator review queue.
+> **Automatic AI detection is unavailable:** the repository does not include validated detection models. New posts require moderator review.
+> Read [SECURITY_PATCH.md](SECURITY_PATCH.md) before running this branch.
 
 ---
 
@@ -44,7 +46,7 @@ HumanHub/
 ├── 📁 nginx/                 # Reverse proxy configuration
 │   └── 📄 nginx.conf         # Unified gateway for API, WebSockets, and SPA
 │
-├── 📄 docker-compose.yml     # Production-ready stack orchestration
+├── 📄 docker-compose.yml     # Development stack orchestration
 ├── 📄 docker-compose.unified.yml # Advanced 12-layer detection pipeline stack
 ├── 📄 package.json           # Root workspace management scripts
 └── 📄 README.md              # Project documentation
@@ -114,13 +116,13 @@ npm run docker:down
 
 ---
 
-## 🔄 Content Verification Pipeline
+## 🔄 Content Review Pipeline
 
-1. **Submit**: A user creates a post &rarr; saved in MongoDB with `status: pending`.
-2. **Buffer**: Post payload is pushed to Redis `moderation:queue`.
-3. **Analyze**: The background `moderationWorker` pulls the job and sends text/media to the AI microservice (`/analyze/text`, `/analyze/media`, `/analyze/behavior`).
-4. **Decision Engine**: Post status is evaluated:
-   * `< 0.30` AI likelihood &rarr; `status: published`
-   * `> 0.80` AI likelihood &rarr; `status: rejected`
-   * Intermediate &rarr; `status: pending` (flagged for human moderator review)
-5. **Live Update**: Socket.IO broadcasts `post:verified` to the author's client to render the "Verified Human ✅" badge immediately.
+1. A new post is stored in MongoDB with `status: pending_review`.
+2. Its ID is added to the Redis moderation queue. If Redis is unavailable, the post remains available for manual review.
+3. The worker requests model-backed results with explicit status, model version, score, and confidence. Unavailable or invalid results cannot approve content.
+4. The bundled Python APIs return HTTP 503 because no validated detector is configured. Existing experimental scoring code is not used for approval.
+5. Authorized moderators review posts at `/moderation`, approving (`published`) or blocking (`blocked`) them.
+6. Authenticated Socket.IO channels deliver review decisions to the author.
+
+Run regression tests with `npm --prefix server test` and build the frontend with `npm --prefix client run build`.

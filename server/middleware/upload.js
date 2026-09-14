@@ -17,16 +17,14 @@ const storage = multer.diskStorage({
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
-    const cleanOriginalName = path.basename(file.originalname).replace(/[^a-zA-Z0-9.-]/g, '_');
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, `${file.fieldname}-${uniqueSuffix}-${cleanOriginalName}`);
+    cb(null, `${file.fieldname}-${uniqueSuffix}-${({ 'image/jpeg': 'image.jpg', 'image/png': 'image.png', 'image/webp': 'image.webp', 'video/mp4': 'video.mp4', 'video/webm': 'video.webm', 'video/quicktime': 'video.mov' })[file.mimetype]}`);
   }
 });
 
 const fileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     'image/jpeg',
-    'image/jpg',
     'image/png',
     'image/webp',
     'video/mp4',
@@ -34,7 +32,7 @@ const fileFilter = (req, file, cb) => {
     'video/quicktime'
   ];
 
-  if (allowedMimeTypes.includes(file.mimetype) || file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+  if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
     cb(new Error('Only approved image (JPG, PNG, WEBP) and video (MP4, WEBM) files are allowed.'), false);
@@ -48,3 +46,4 @@ export const upload = multer({
   },
   fileFilter
 });
+

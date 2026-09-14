@@ -3,7 +3,10 @@ import bcrypt from 'bcryptjs';
 import asyncHandler from '../utils/asyncHandler.js';
 import User from '../models/User.js';
 import OTP from '../models/OTP.js';
-import generateToken, { generateRefreshToken } from '../utils/generateToken.js';
+import { issueSession, rotateSession, revokeSession, clearCookieOptions } from '../services/sessionService.js';
+import { checkOTP } from '../services/otpService.js';
+import Session from '../models/Session.js';
+import { getIO } from '../socket/socketHandler.js';
 import { sendOTPEmail } from '../utils/mailer.js';
 
 // Helper to generate a cryptographically secure 6-digit OTP
@@ -17,9 +20,9 @@ const generateSecureOTP = () => {
 export const registerUser = asyncHandler(async (req, res) => {
   const { username, email, password, displayName, bio } = req.body;
 
-  if (!username || !email || !password) {
+  if (typeof username !== 'string' || typeof email !== 'string' || typeof password !== 'string' || password.length < 8 || password.length > 72 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     res.status(400);
-    throw new Error('Please provide username, email, and password');
+    throw new Error('Provide a username, valid email, and password of 8–72 characters');
   }
 
   const cleanEmail = email.toLowerCase().trim();
@@ -44,6 +47,10 @@ export const registerUser = asyncHandler(async (req, res) => {
   const passwordHash = await bcrypt.hash(password, salt);
 
   // Generate OTP
+  const pending = await OTP.findOne({ email: cleanEmail, type: 'register' });
+  if (pending?.lastSentAt && Date.now() - pending.lastSentAt.getTime() < 60000) {
+    res.status(429); throw new Error('Wait 60 seconds before requesting another code.');
+  }
   const rawOTP = generateSecureOTP();
   const otpSalt = await bcrypt.genSalt(8);
   const otpHash = await bcrypt.hash(rawOTP, otpSalt);
@@ -56,6 +63,7 @@ export const registerUser = asyncHandler(async (req, res) => {
     {
       email: cleanEmail,
       otpHash,
+      failedAttempts: 0,
       type: 'register',
       tempUserData: {
         username: cleanUsername,
@@ -72,7 +80,8 @@ export const registerUser = asyncHandler(async (req, res) => {
   try {
     await sendOTPEmail(cleanEmail, rawOTP, 'register');
   } catch (emailErr) {
-    console.error('Failed to send verification email:', emailErr);
+    res.status(503);
+    throw new Error('Verification email could not be sent. Please try again shortly.');
   }
 
   res.status(200).json({
@@ -95,17 +104,10 @@ export const verifyOTP = asyncHandler(async (req, res) => {
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const otpRecord = await OTP.findOne({ email: cleanEmail, type });
-
+  const otpRecord = await checkOTP(cleanEmail, type, otp, type === 'register');
   if (!otpRecord) {
     res.status(400);
-    throw new Error('Verification code has expired or was not requested. Please request a new one.');
-  }
-
-  const isMatch = await bcrypt.compare(otp.toString().trim(), otpRecord.otpHash);
-  if (!isMatch) {
-    res.status(400);
-    throw new Error('Invalid verification code. Please try again.');
+    throw new Error('Invalid, expired, or exhausted verification code. Request a new code.');
   }
 
   if (type === 'register') {
@@ -113,34 +115,13 @@ export const verifyOTP = asyncHandler(async (req, res) => {
 
     // Double check availability
     const existing = await User.findOne({ $or: [{ email: cleanEmail }, { username }] });
-    let user;
-
     if (existing) {
-      existing.emailVerified = true;
-      existing.displayName = displayName || existing.displayName;
-      user = await existing.save();
-    } else {
-      user = await User.create({
-        username,
-        displayName: displayName || username,
-        email: cleanEmail,
-        passwordHash,
-        emailVerified: true
-      });
+      res.status(409);
+      throw new Error('Email or username is already registered. Please sign in or choose another username.');
     }
-
-    // Delete OTP record after successful verification
-    await OTP.deleteOne({ _id: otpRecord._id });
-
-    const token = generateToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
-
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    const user = await User.create({ username, displayName: displayName || username,
+      email: cleanEmail, passwordHash, emailVerified: true });
+    const token = await issueSession(user, res);
 
     const userObj = {
       _id: user._id,
@@ -203,6 +184,7 @@ export const resendOTP = asyncHandler(async (req, res) => {
   const otpHash = await bcrypt.hash(rawOTP, otpSalt);
 
   existingOTP.otpHash = otpHash;
+  existingOTP.failedAttempts = 0;
   existingOTP.expiresAt = new Date(Date.now() + 10 * 60 * 1000);
   existingOTP.lastSentAt = new Date();
   existingOTP.resendAttempts = (existingOTP.resendAttempts || 0) + 1;
@@ -223,7 +205,7 @@ export const loginUser = asyncHandler(async (req, res) => {
   const { email, username, password } = req.body;
   const identifier = email || username;
 
-  if (!identifier || !password) {
+  if (typeof identifier !== 'string' || typeof password !== 'string' || !identifier || !password) {
     res.status(400);
     throw new Error('Please provide email/username and password');
   }
@@ -232,7 +214,7 @@ export const loginUser = asyncHandler(async (req, res) => {
   const user = await User.findOne({
     $or: [
       { email: trimmedIdentifier.toLowerCase() },
-      { username: new RegExp(`^${trimmedIdentifier}$`, 'i') }
+      { username: trimmedIdentifier.toLowerCase() }
     ]
   });
 
@@ -241,20 +223,12 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new Error('Invalid email/username or password');
   }
 
-  if (user.isBanned) {
+  if (user.isBanned || !user.emailVerified) {
     res.status(403);
-    throw new Error('This account has been suspended.');
+    throw new Error('Account is suspended or email verification is required.');
   }
 
-  const token = generateToken(user._id);
-  const refreshToken = generateRefreshToken(user._id);
-
-  res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-  });
+  const token = await issueSession(user, res);
 
   const userObj = {
     _id: user._id,
@@ -327,6 +301,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
       {
         email: cleanEmail,
         otpHash,
+        failedAttempts: 0,
         type: 'forgot_password',
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
         lastSentAt: new Date()
@@ -355,23 +330,16 @@ export const resetPassword = asyncHandler(async (req, res) => {
     throw new Error('Please provide email, verification code, and new password');
   }
 
-  if (newPassword.length < 6) {
+  if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 72) {
     res.status(400);
-    throw new Error('New password must be at least 6 characters');
+    throw new Error('New password must be 8–72 characters');
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const otpRecord = await OTP.findOne({ email: cleanEmail, type: 'forgot_password' });
-
+  const otpRecord = await checkOTP(cleanEmail, 'forgot_password', otp, true);
   if (!otpRecord) {
     res.status(400);
-    throw new Error('Password reset code has expired. Please request a new one.');
-  }
-
-  const isMatch = await bcrypt.compare(otp.toString().trim(), otpRecord.otpHash);
-  if (!isMatch) {
-    res.status(400);
-    throw new Error('Invalid verification code');
+    throw new Error('Invalid, expired, or exhausted verification code.');
   }
 
   const user = await User.findOne({ email: cleanEmail });
@@ -383,6 +351,8 @@ export const resetPassword = asyncHandler(async (req, res) => {
   const salt = await bcrypt.genSalt(10);
   user.passwordHash = await bcrypt.hash(newPassword, salt);
   await user.save();
+  await Session.updateMany({ user: user._id }, { $set: { revokedAt: new Date() } });
+  getIO()?.in('user_' + user._id).disconnectSockets(true);
 
   await OTP.deleteOne({ _id: otpRecord._id });
 
@@ -396,10 +366,19 @@ export const resetPassword = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/logout
 // @access  Public
 export const logoutUser = asyncHandler(async (req, res) => {
-  res.cookie('refreshToken', '', {
-    httpOnly: true,
-    expires: new Date(0)
-  });
-
+  const sessions = await revokeSession(req);
+  for (const id of sessions) getIO()?.in('session_' + id).disconnectSockets(true);
+  res.clearCookie('refreshToken', clearCookieOptions());
+  // Clear legacy cookies that used the root path too.
+  res.clearCookie('refreshToken', { ...clearCookieOptions(), path: '/' });
   res.status(200).json({ success: true, message: 'Logged out successfully' });
+});
+
+export const refreshSession = asyncHandler(async (req, res) => {
+  const result = await rotateSession(req, res);
+  if (!result) {
+    res.clearCookie('refreshToken', clearCookieOptions());
+    return res.status(401).json({ success: false, message: 'Please sign in again.' });
+  }
+  res.json({ success: true, ...result });
 });

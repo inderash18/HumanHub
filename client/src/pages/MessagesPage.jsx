@@ -128,9 +128,25 @@ export default function MessagesPage() {
       }
       fetchConversations();
     } catch (err) {
+      setMessages(previous => previous.filter(message => message._id !== optimisticMsg._id));
+      setInputText(current => current || textToSend);
       toast.error('Failed to deliver message');
     }
   };
+
+  useEffect(() => {
+    const receive = ({ detail: message }) => {
+      const sender = message.sender?._id || message.sender;
+      const recipient = message.recipient?._id || message.recipient;
+      if (selectedUser && (sender === selectedUser._id || recipient === selectedUser._id)) {
+        setMessages(previous => previous.some(item => item._id === message._id)
+          ? previous : [...previous, message]);
+      }
+      fetchConversations();
+    };
+    window.addEventListener('message:receive:event', receive);
+    return () => window.removeEventListener('message:receive:event', receive);
+  }, [selectedUser?._id]);
 
   // Search users for new conversation
   useEffect(() => {

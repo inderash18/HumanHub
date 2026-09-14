@@ -42,7 +42,7 @@ export default function PostEditor({ communityId = null, onSuccess }) {
                 mediaUrls: mediaUrl ? [mediaUrl] : [] 
             };
             await createPost(payload);
-            toast.success("Identity verified. Post published.");
+            toast.success("Post submitted for review.");
             setTitle('');
             setBody('');
             if(onSuccess) onSuccess();
@@ -131,3 +131,4 @@ export default function PostEditor({ communityId = null, onSuccess }) {
         </form>
     );
 }
+

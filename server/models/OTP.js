@@ -22,6 +22,7 @@ const otpSchema = new mongoose.Schema({
     displayName: String,
     passwordHash: String
   },
+  failedAttempts: { type: Number, default: 0 },
   resendAttempts: {
     type: Number,
     default: 0
@@ -40,3 +41,4 @@ const otpSchema = new mongoose.Schema({
 otpSchema.index({ email: 1, type: 1 });
 
 export default mongoose.model('OTP', otpSchema);
+

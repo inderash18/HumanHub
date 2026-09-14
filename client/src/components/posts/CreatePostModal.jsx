@@ -87,7 +87,7 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
       };
 
       await api.post('/posts', postPayload);
-      toast.success('Moment shared successfully! ✨');
+      toast.success('Post submitted for moderator review.');
       if (onPostCreated) onPostCreated();
       onClose();
     } catch (err) {
@@ -212,3 +212,4 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
     </div>
   );
 }
+

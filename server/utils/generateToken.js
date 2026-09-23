@@ -1,15 +1,8 @@
 import jwt from 'jsonwebtoken';
+import { jwtSecret } from '../config/security.js';
 
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'dev_secret_key_123', {
-    expiresIn: '15m',
+export default function generateToken(user, sessionId) {
+  return jwt.sign({ id: String(user._id), sid: String(sessionId) }, jwtSecret(), {
+    expiresIn: '15m', algorithm: 'HS256', issuer: 'humanhub', audience: 'humanhub-client'
   });
-};
-
-export const generateRefreshToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_REFRESH_SECRET || 'dev_refresh_secret', {
-    expiresIn: '7d', // 7 days
-  });
-};
-
-export default generateToken;
+}

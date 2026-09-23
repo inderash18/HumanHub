@@ -39,6 +39,7 @@ export default function App() {
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/p/:id" element={<PostDetailPage />} />
           <Route path="/u/:username" element={<UserProfilePage />} />
+          <Route path="/moderation" element={<ModeratorDashboard />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/moderator" element={<ModeratorDashboard />} />
           <Route path="/login" element={<LoginPage />} />

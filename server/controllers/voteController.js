@@ -3,7 +3,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import Vote from '../models/Vote.js';
 import Post from '../models/Post.js';
 import Comment from '../models/Comment.js';
-import { createNotification } from './notificationController.js';
+import Notification from '../models/Notification.js';
 import { getIO } from '../socket/socketHandler.js';
 
 // @desc    Vote on post or comment
@@ -69,12 +69,12 @@ export const handleVote = asyncHandler(async (req, res) => {
   // Dispatch notification for like/upvote
   if (value === 1 && upDiff === 1 && target.author && target.author.toString() !== req.user._id.toString()) {
     try {
-      await createNotification({
+      await Notification.create({
         recipient: target.author,
         sender: req.user._id,
         type: 'like',
-        postId: type === 'post' ? target._id : target.post,
-        body: `@${req.user.username} liked your ${type}.`
+        post: type === 'post' ? target._id : target.post,
+        text: `@${req.user.username} liked your ${type}.`
       });
     } catch (notifErr) {
       console.log('[Notification Warning]', notifErr.message);
@@ -116,4 +116,5 @@ export const handleVote = asyncHandler(async (req, res) => {
     hasLiked: value === 1
   });
 });
+
 

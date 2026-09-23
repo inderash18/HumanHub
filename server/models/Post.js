@@ -34,9 +34,11 @@ const postSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['published', 'pending_review', 'blocked'],
-    default: 'published',
+    default: 'pending_review',
     index: true
   },
+  detectionScores: { type: mongoose.Schema.Types.Mixed, default: null },
+  moderationError: { type: String, default: '' },
   likesCount: {
     type: Number,
     default: 0
@@ -62,3 +64,4 @@ postSchema.index({ status: 1, createdAt: -1 });
 postSchema.index({ tags: 1 });
 
 export default mongoose.model('Post', postSchema);
+

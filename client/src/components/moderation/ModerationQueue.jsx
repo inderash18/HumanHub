@@ -27,7 +27,7 @@ export default function ModerationQueue() {
     const handleAction = async (id, type) => {
         try {
             if (type === 'approve') await approveItemAction(id);
-            if (type === 'reject') await rejectItemAction(id, 'Admin override ban');
+            if (type === 'reject') await rejectItemAction(id, 'Blocked after moderator review');
 
             toast.success(`Post ${type}d.`);
             setQueue(q => q.filter(item => item._id !== id));
@@ -37,7 +37,7 @@ export default function ModerationQueue() {
     };
 
     if (loading) return <div className="p-8 text-center font-mono animate-pulse">Scanning DB queues...</div>;
-    if (queue.length === 0) return <div className="p-8 text-center font-mono bg-brand-success/5 text-brand-success border border-brand-success/20 rounded-lg">Queue empty. All active systems verified.</div>;
+    if (queue.length === 0) return <div className="p-8 text-center font-mono bg-brand-success/5 text-brand-success border border-brand-success/20 rounded-lg">No posts are awaiting review.</div>;
 
     return (
         <div className="space-y-6">
@@ -51,24 +51,24 @@ export default function ModerationQueue() {
                      <div className="flex justify-between items-start gap-8">
                          <div className="flex-1">
                              <div className="text-brand-muted text-xs mb-2">
-                                 Flagged By Model • Author: <span className="text-white hover:underline cursor-pointer">{item.author?.username}</span>
+                                 Awaiting Review • Author: <span className="text-white hover:underline cursor-pointer">{item.author?.username}</span>
                              </div>
-                             <h4 className="text-lg font-bold text-white mb-2">{item.title}</h4>
+                             <h4 className="text-lg font-bold text-white mb-2">{item.caption}</h4>
                              <p className="text-sm font-jakarta text-white/70 bg-brand-bg/50 p-4 rounded-lg mb-6 max-h-[150px] overflow-y-auto custom-scrollbar">
                                  {item.body}
                              </p>
                          </div>
                          <div className="w-72 shrink-0">
-                             <ScoreBreakdown scores={item.detectionScores} />
+                             {item.detectionScores ? <ScoreBreakdown scores={item.detectionScores} /> : <p>No automatic detection result is available.</p>}
                          </div>
                      </div>
 
                      <div className="flex items-center gap-4 pt-4 border-t border-white/5 mt-4">
                          <Button onClick={() => handleAction(item._id, 'approve')} variant="secondary" className="hover:bg-brand-success hover:border-brand-success hover:text-black mt-2">
-                             Overrule Model & Approve
+                             Approve Post
                          </Button>
                          <Button onClick={() => handleAction(item._id, 'reject')} variant="danger" className="mt-2">
-                             Confirm Reject & Ban
+                             Block Post
                          </Button>
                      </div>
                 </div>
@@ -76,3 +76,4 @@ export default function ModerationQueue() {
         </div>
     );
 }
+

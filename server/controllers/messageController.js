@@ -24,6 +24,10 @@ export const sendMessage = asyncHandler(async (req, res) => {
     throw new Error('Recipient user not found');
   }
 
+  if (recipient.isBanned || recipient.privacySettings?.allowDirectMessages === false) {
+    return res.status(403).json({ message: 'This user is not accepting messages.' });
+  }
+
   // Find or create conversation
   let conversation = await Conversation.findOne({
     participants: { $all: [req.user._id, targetId] }
@@ -151,3 +155,4 @@ export const getUnreadMessagesCount = asyncHandler(async (req, res) => {
 
   res.status(200).json({ count });
 });
+

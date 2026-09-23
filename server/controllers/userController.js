@@ -3,9 +3,14 @@ import asyncHandler from '../utils/asyncHandler.js';
 import User from '../models/User.js';
 import Post from '../models/Post.js';
 import Follow from '../models/Follow.js';
+import Block from '../models/Block.js';
 import Like from '../models/Like.js';
 import SavedPost from '../models/SavedPost.js';
 import Notification from '../models/Notification.js';
+import { canViewPost, canFollow } from '../policies/authorization.js';
+
+// Escape regex special characters
+const escapeRegex = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // @desc    Get user profile by username or ID
 // @route   GET /api/users/profile/:id
@@ -19,50 +24,75 @@ export const getUserProfile = asyncHandler(async (req, res) => {
     : User.findOne({ username: identifier.toLowerCase().trim() }))
     .select('-passwordHash');
 
-  if (!user) {
+  if (!user || user.isBanned) {
     res.status(404);
     throw new Error('User not found');
   }
 
-  const [posts, totalPosts, isFollowing] = await Promise.all([
-    Post.find({ author: user._id, status: 'published' })
-      .populate('community', 'name slug icon')
-      .sort({ createdAt: -1 })
-      .limit(30),
-    Post.countDocuments({ author: user._id, status: 'published' }),
-    req.user ? Follow.exists({ follower: req.user._id, following: user._id }) : false
-  ]);
-
-  // Check liked & saved status for logged-in user
-  let likedPostIds = new Set();
-  let savedPostIds = new Set();
-
-  if (req.user && posts.length > 0) {
-    const postIds = posts.map(p => p._id);
-    const [likes, saves] = await Promise.all([
-      Like.find({ user: req.user._id, post: { $in: postIds } }),
-      SavedPost.find({ user: req.user._id, post: { $in: postIds } })
-    ]);
-    likes.forEach(l => likedPostIds.add(l.post.toString()));
-    saves.forEach(s => savedPostIds.add(s.post.toString()));
+  // Check bidirectional block if logged in
+  let isBlocked = false;
+  if (req.user) {
+    isBlocked = Boolean(await Block.isBlocked(req.user._id, user._id));
   }
 
-  const formattedPosts = posts.map(p => {
-    const postObj = p.toObject();
-    const idStr = p._id.toString();
-    return {
-      ...postObj,
-      author: {
-        _id: user._id,
-        username: user.username,
-        displayName: user.displayName,
-        avatar: user.avatar
-      },
-      hasLiked: likedPostIds.has(idStr),
-      isLiked: likedPostIds.has(idStr),
-      isSaved: savedPostIds.has(idStr)
-    };
-  });
+  if (isBlocked && req.user?.role !== 'admin' && req.user?.role !== 'moderator') {
+    res.status(404);
+    throw new Error('User not found');
+  }
+
+  const isSelf = req.user ? req.user._id.toString() === user._id.toString() : false;
+  const isFollowing = req.user && !isSelf
+    ? Boolean(await Follow.exists({ follower: req.user._id, following: user._id }))
+    : false;
+
+  const isPrivate = Boolean(user.privacySettings?.isPrivate);
+  const canSeePosts = isSelf || !isPrivate || isFollowing || ['admin', 'moderator'].includes(req.user?.role);
+
+  let formattedPosts = [];
+  let totalPosts = 0;
+
+  if (canSeePosts) {
+    const [posts, count] = await Promise.all([
+      Post.find({ author: user._id, status: 'published' })
+        .populate('community', 'name slug icon')
+        .sort({ createdAt: -1 })
+        .limit(30),
+      Post.countDocuments({ author: user._id, status: 'published' })
+    ]);
+    totalPosts = count;
+
+    let likedPostIds = new Set();
+    let savedPostIds = new Set();
+
+    if (req.user && posts.length > 0) {
+      const postIds = posts.map(p => p._id);
+      const [likes, saves] = await Promise.all([
+        Like.find({ user: req.user._id, post: { $in: postIds } }),
+        SavedPost.find({ user: req.user._id, post: { $in: postIds } })
+      ]);
+      likes.forEach(l => likedPostIds.add(l.post.toString()));
+      saves.forEach(s => savedPostIds.add(s.post.toString()));
+    }
+
+    formattedPosts = posts.map(p => {
+      const postObj = p.toObject();
+      const idStr = p._id.toString();
+      return {
+        ...postObj,
+        author: {
+          _id: user._id,
+          username: user.username,
+          displayName: user.displayName,
+          avatar: user.avatar
+        },
+        hasLiked: likedPostIds.has(idStr),
+        isLiked: likedPostIds.has(idStr),
+        isSaved: savedPostIds.has(idStr)
+      };
+    });
+  } else {
+    totalPosts = await Post.countDocuments({ author: user._id, status: 'published' });
+  }
 
   const followersCount = await Follow.countDocuments({ following: user._id });
   const followingCount = await Follow.countDocuments({ follower: user._id });
@@ -71,7 +101,7 @@ export const getUserProfile = asyncHandler(async (req, res) => {
     _id: user._id,
     username: user.username,
     displayName: user.displayName || user.username,
-    email: req.user?._id.toString() === user._id.toString() ? user.email : undefined,
+    email: isSelf ? user.email : undefined,
     avatar: user.avatar,
     bio: user.bio,
     role: user.role,
@@ -79,7 +109,8 @@ export const getUserProfile = asyncHandler(async (req, res) => {
     followingCount,
     postsCount: totalPosts,
     isFollowing: !!isFollowing,
-    isSelf: req.user?._id.toString() === user._id.toString(),
+    isSelf,
+    isBlocked: !!isBlocked,
     privacySettings: user.privacySettings || { isPrivate: false, allowDirectMessages: true },
     createdAt: user.createdAt
   };
@@ -97,14 +128,17 @@ export const updateUserProfile = asyncHandler(async (req, res) => {
     throw new Error('User not found');
   }
 
-  if (req.body.displayName !== undefined) user.displayName = req.body.displayName.trim();
-  if (req.body.bio !== undefined) user.bio = req.body.bio.trim();
-  if (req.body.avatar !== undefined) user.avatar = req.body.avatar.trim();
-  if (req.body.privacySettings) {
-    user.privacySettings = {
-      ...user.privacySettings,
-      ...req.body.privacySettings
-    };
+  // Strict allowlist validation
+  if (typeof req.body.displayName === 'string') user.displayName = req.body.displayName.trim().slice(0, 50);
+  if (typeof req.body.bio === 'string') user.bio = req.body.bio.trim().slice(0, 300);
+  if (typeof req.body.avatar === 'string') user.avatar = req.body.avatar.trim();
+  if (req.body.privacySettings && typeof req.body.privacySettings === 'object') {
+    if (typeof req.body.privacySettings.isPrivate === 'boolean') {
+      user.privacySettings.isPrivate = req.body.privacySettings.isPrivate;
+    }
+    if (typeof req.body.privacySettings.allowDirectMessages === 'boolean') {
+      user.privacySettings.allowDirectMessages = req.body.privacySettings.allowDirectMessages;
+    }
   }
 
   const updatedUser = await user.save();
@@ -140,9 +174,16 @@ export const followUser = asyncHandler(async (req, res) => {
   }
 
   const targetUser = await User.findById(targetId);
-  if (!targetUser) {
+  if (!targetUser || targetUser.isBanned) {
     res.status(404);
     throw new Error('User not found');
+  }
+
+  // Check blocking
+  const isBlocked = await Block.isBlocked(currentUserId, targetId);
+  if (isBlocked) {
+    res.status(403);
+    throw new Error('Cannot follow this user due to privacy/blocking settings.');
   }
 
   const existingFollow = await Follow.findOne({ follower: currentUserId, following: targetId });
@@ -185,6 +226,60 @@ export const followUser = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Block a user
+// @route   POST /api/users/:id/block
+// @access  Private
+export const blockUser = asyncHandler(async (req, res) => {
+  const targetId = req.params.id;
+  const currentUserId = req.user._id;
+
+  if (targetId === currentUserId.toString()) {
+    res.status(400);
+    throw new Error('You cannot block yourself');
+  }
+
+  const targetUser = await User.findById(targetId);
+  if (!targetUser) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+
+  await Block.findOneAndUpdate(
+    { blocker: currentUserId, blocked: targetId },
+    { blocker: currentUserId, blocked: targetId },
+    { upsert: true }
+  );
+
+  // Remove any follow relationships between both users
+  await Promise.all([
+    Follow.deleteMany({
+      $or: [
+        { follower: currentUserId, following: targetId },
+        { follower: targetId, following: currentUserId }
+      ]
+    }),
+    Notification.deleteMany({
+      $or: [
+        { recipient: targetId, sender: currentUserId },
+        { recipient: currentUserId, sender: targetId }
+      ]
+    })
+  ]);
+
+  res.status(200).json({ success: true, message: 'User blocked successfully' });
+});
+
+// @desc    Unblock a user
+// @route   POST /api/users/:id/unblock
+// @access  Private
+export const unblockUser = asyncHandler(async (req, res) => {
+  const targetId = req.params.id;
+  const currentUserId = req.user._id;
+
+  await Block.deleteOne({ blocker: currentUserId, blocked: targetId });
+  res.status(200).json({ success: true, message: 'User unblocked successfully' });
+});
+
 // @desc    Get user followers
 // @route   GET /api/users/:id/followers
 // @access  Public
@@ -215,11 +310,19 @@ export const getUserFollowing = asyncHandler(async (req, res) => {
 // @route   GET /api/users/suggestions
 // @access  Private
 export const getSuggestedUsers = asyncHandler(async (req, res) => {
-  const followingRecords = await Follow.find({ follower: req.user._id }).select('following');
-  const followingIds = followingRecords.map(f => f.following);
+  const [followingRecords, blockedRecords] = await Promise.all([
+    Follow.find({ follower: req.user._id }).select('following'),
+    Block.find({ $or: [{ blocker: req.user._id }, { blocked: req.user._id }] })
+  ]);
+
+  const excludedIds = new Set([
+    req.user._id.toString(),
+    ...followingRecords.map(f => f.following.toString()),
+    ...blockedRecords.map(b => (b.blocker.toString() === req.user._id.toString() ? b.blocked.toString() : b.blocker.toString()))
+  ]);
 
   const suggestions = await User.find({
-    _id: { $nin: [...followingIds, req.user._id] },
+    _id: { $nin: Array.from(excludedIds) },
     isBanned: false
   })
   .select('username displayName avatar bio followersCount')
@@ -232,13 +335,15 @@ export const getSuggestedUsers = asyncHandler(async (req, res) => {
 // @route   GET /api/users/search/query
 // @access  Public
 export const searchUsers = asyncHandler(async (req, res) => {
-  const query = (req.query.q || '').trim();
-  if (!query) return res.status(200).json([]);
+  const rawQuery = (req.query.q || '').trim();
+  if (!rawQuery || rawQuery.length > 50) return res.status(200).json([]);
+
+  const sanitized = escapeRegex(rawQuery);
 
   const results = await User.find({
     $or: [
-      { username: { $regex: query, $options: 'i' } },
-      { displayName: { $regex: query, $options: 'i' } }
+      { username: { $regex: sanitized, $options: 'i' } },
+      { displayName: { $regex: sanitized, $options: 'i' } }
     ],
     isBanned: false
   })

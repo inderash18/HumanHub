@@ -32,12 +32,21 @@ export function publicUser(user) {
     followersCount, followingCount, postsCount, privacySettings };
 }
 
-export async function issueSession(user, res) {
+export async function issueSession(user, res, req = null) {
   const raw = crypto.randomBytes(48).toString('hex');
+  const userAgent = req?.headers?.['user-agent'] ? String(req.headers['user-agent']).slice(0, 200) : 'Web Client';
+  const ipAddress = req?.ip || req?.connection?.remoteAddress || null;
   const session = await Session.create({
-    user: user._id, tokenHash: hash(raw), expiresAt: new Date(Date.now() + lifetime)
+    user: user._id, 
+    tokenHash: hash(raw), 
+    expiresAt: new Date(Date.now() + lifetime),
+    userAgent,
+    ipAddress,
+    lastActive: new Date()
   });
-  res.cookie('refreshToken', raw, cookieOptions());
+  if (res && typeof res.cookie === 'function') {
+    res.cookie('refreshToken', raw, cookieOptions());
+  }
   return generateToken(user, session._id);
 }
 
@@ -53,6 +62,8 @@ export async function authenticateAccessToken(token) {
   if (!user || !session || user.isBanned || !user.emailVerified) {
     throw new Error('Session is no longer active');
   }
+  // Advisory last active timestamp update
+  Session.updateOne({ _id: session._id }, { $set: { lastActive: new Date() } }).catch(() => {});
   return { user, session };
 }
 
@@ -61,9 +72,20 @@ export async function rotateSession(req, res) {
   if (!raw || !/^[a-f0-9]{96}$/.test(raw)) return null;
   // Rotate the secret atomically while keeping the session ID stable across tabs.
   const nextToken = crypto.randomBytes(48).toString('hex');
+  const userAgent = req?.headers?.['user-agent'] ? String(req.headers['user-agent']).slice(0, 200) : 'Web Client';
+  const ipAddress = req?.ip || req?.connection?.remoteAddress || null;
+  
   const session = await Session.findOneAndUpdate({
     tokenHash: hash(raw), revokedAt: null, expiresAt: { $gt: new Date() }
-  }, { $set: { tokenHash: hash(nextToken), expiresAt: new Date(Date.now() + lifetime) } }, { new: true });
+  }, { 
+    $set: { 
+      tokenHash: hash(nextToken), 
+      expiresAt: new Date(Date.now() + lifetime),
+      userAgent,
+      ipAddress,
+      lastActive: new Date()
+    } 
+  }, { new: true });
   if (!session) return null;
   const user = await User.findById(session.user);
   if (!user || user.isBanned || !user.emailVerified) return null;
@@ -93,4 +115,38 @@ export async function revokeSession(req) {
     }
   }
   return revoked;
+}
+
+export async function listUserSessions(userId, currentSessionId = null) {
+  const sessions = await Session.find({
+    user: userId,
+    revokedAt: null,
+    expiresAt: { $gt: new Date() }
+  }).sort({ lastActive: -1 }).limit(20);
+
+  return sessions.map(s => ({
+    id: s._id,
+    userAgent: s.userAgent || 'Unknown Device',
+    ipAddress: s.ipAddress ? s.ipAddress.replace(/^.*:/, '') : null, // Clean IPv4-mapped IPv6
+    lastActive: s.lastActive || s.createdAt,
+    createdAt: s.createdAt,
+    isCurrent: currentSessionId ? String(s._id) === String(currentSessionId) : false
+  }));
+}
+
+export async function revokeSessionById(userId, sessionId) {
+  const session = await Session.findOneAndUpdate(
+    { _id: sessionId, user: userId, revokedAt: null },
+    { $set: { revokedAt: new Date() } }
+  );
+  return Boolean(session);
+}
+
+export async function revokeAllUserSessions(userId, exceptSessionId = null) {
+  const query = { user: userId, revokedAt: null };
+  if (exceptSessionId) {
+    query._id = { $ne: exceptSessionId };
+  }
+  const result = await Session.updateMany(query, { $set: { revokedAt: new Date() } });
+  return result.modifiedCount;
 }

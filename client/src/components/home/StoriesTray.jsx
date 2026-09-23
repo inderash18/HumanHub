@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { IoAdd } from 'react-icons/io5';
+import { Plus } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import api from '../../services/api';
 import StoryViewerModal from './StoryViewerModal';
@@ -19,7 +19,7 @@ export default function StoriesTray() {
     try {
       setLoading(true);
       const res = await api.get('/stories');
-      setStories(res.data || []);
+      setStories(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       setStories([]);
     } finally {
@@ -31,7 +31,7 @@ export default function StoriesTray() {
 
   return (
     <>
-      <div className="w-full bg-hub-surface py-4 border-b border-hub-border flex items-center gap-4 overflow-x-auto no-scrollbar select-none px-2 sm:px-0">
+      <div className="w-full bg-[var(--ig-bg)] py-3 sm:py-4 border-b border-[var(--ig-border)] md:border md:rounded-xl md:mb-6 flex items-center gap-4 overflow-x-auto no-scrollbar select-none px-4">
         {/* Current User Story */}
         {user && (
           <div className="flex flex-col items-center gap-1.5 flex-shrink-0 cursor-pointer group">
@@ -40,13 +40,14 @@ export default function StoriesTray() {
                 src={user?.avatar} 
                 name={user?.displayName || user?.username} 
                 size="lg"
-                verified={user?.isVerified}
               />
-              <div className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-hub-accent text-white flex items-center justify-center border-2 border-hub-surface">
-                <IoAdd className="text-sm font-bold" />
+              <div className="absolute bottom-0 right-0 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[var(--ig-primary-button)] text-white flex items-center justify-center border-2 border-[var(--ig-bg)]">
+                <Plus className="w-3 h-3 stroke-[3]" />
               </div>
             </div>
-            <span className="text-[12px] text-hub-text-secondary max-w-[70px] truncate">Your story</span>
+            <span className="text-[11px] text-[var(--ig-text-secondary)] max-w-[66px] truncate text-center">
+              Your story
+            </span>
           </div>
         )}
 
@@ -61,16 +62,17 @@ export default function StoriesTray() {
               src={storyGroup.author?.avatar}
               name={storyGroup.author?.displayName || storyGroup.author?.username}
               size="lg"
-              verified={storyGroup.author?.isVerified}
+              hasStory={true}
+              isStoryViewed={Boolean(storyGroup.viewed)}
             />
-            <span className="text-[12px] text-hub-text-primary font-medium max-w-[74px] truncate">
+            <span className="text-[11px] text-[var(--ig-text-primary)] max-w-[66px] truncate text-center">
               {storyGroup.author?.username || 'user'}
             </span>
           </div>
         ))}
       </div>
 
-      {/* Fullscreen Story Viewer */}
+      {/* Fullscreen Story Viewer Modal */}
       {activeStoryIndex !== null && stories[activeStoryIndex] && (
         <StoryViewerModal 
           stories={stories}

@@ -35,8 +35,8 @@ services:
       - PORT=5000
       - BACKEND_URL=http://localhost/api
       - MONGODB_URI=mongodb://mongo:27017/humanhub
-      - JWT_SECRET=dhruvit_secret_key_2026
-      - JWT_REFRESH_SECRET=dhruvit_refresh_secret_2026
+      - JWT_SECRET=c79d63892a0845a7bb29db261e479d286d88c227bc9a491efab915003c4f7ae2
+      - JWT_REFRESH_SECRET=e13b865529a6b4ec2b8109d94a974b722301c22bc84a86b97e20b3323089d5f7
       - PG_URI=postgresql://postgres:postgres@postgres:5432/humanhub
       - REDIS_URL=redis://redis:6379
       - FRONTEND_URL=http://localhost

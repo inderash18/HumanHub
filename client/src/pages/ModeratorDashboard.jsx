@@ -1,8 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { ShieldCheck, AlertTriangle, FileText, CheckCircle2, XCircle, UserX } from 'lucide-react';
-import { useAuthStore } from '../store/authStore';
+import { 
+  ShieldCheck, 
+  AlertTriangle, 
+  FileText, 
+  CheckCircle2, 
+  XCircle, 
+  UserX,
+  Sparkles,
+  Layers
+} from 'lucide-react';
+import { useAuthStore } from '../store/useAuthStore';
 import ModerationQueue from '../components/moderation/ModerationQueue';
+import OriginReviewQueue from '../components/moderation/OriginReviewQueue';
 import api from '../services/api';
 
 const STAT_CONFIG = {
@@ -17,6 +27,7 @@ export default function ModeratorDashboard() {
   const authorized = ['admin', 'moderator'].includes(user?.role);
   const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState('origin_disputes'); // origin_disputes | post_queue
 
   useEffect(() => {
     if (!authorized) return;
@@ -30,19 +41,19 @@ export default function ModeratorDashboard() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 space-y-8">
+    <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 space-y-6 select-none">
       {/* Header */}
       <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-[var(--danger)]/15 border border-[var(--danger)]/30 flex items-center justify-center text-[var(--danger)]">
+          <div className="w-10 h-10 rounded-2xl bg-[#0095F6]/15 border border-[#0095F6]/30 flex items-center justify-center text-[#0095F6]">
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-display text-xl sm:text-2xl font-bold text-[var(--text-primary)]">
-              Moderation Dashboard
+            <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)]">
+              Moderation & Origin Center
             </h1>
-            <p className="text-xs text-[var(--text-tertiary)]">
-              Review flagged and pending submissions to ensure content authenticity and community safety.
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Review flagged submissions and resolve disputed AI/authenticity origin claims.
             </p>
           </div>
         </div>
@@ -57,7 +68,7 @@ export default function ModeratorDashboard() {
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
           {Object.entries(stats).map(([key, count]) => {
             const config = STAT_CONFIG[key] || {
               label: key,
@@ -70,7 +81,7 @@ export default function ModeratorDashboard() {
             return (
               <div
                 key={key}
-                className={`p-5 rounded-2xl bg-[var(--surface)] border ${config.border} shadow-sm space-y-2`}
+                className={`p-4 rounded-xl bg-[var(--surface)] border ${config.border} shadow-sm space-y-1.5`}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-[var(--text-secondary)]">{config.label}</span>
@@ -78,7 +89,7 @@ export default function ModeratorDashboard() {
                     <Icon className="w-4 h-4" />
                   </div>
                 </div>
-                <div className="text-2xl font-bold font-display text-[var(--text-primary)]">
+                <div className="text-2xl font-bold text-[var(--text-primary)]">
                   {count}
                 </div>
               </div>
@@ -87,13 +98,38 @@ export default function ModeratorDashboard() {
         </div>
       )}
 
-      {/* Queue Component */}
-      <div>
-        <div className="mb-4">
-          <h2 className="text-lg font-bold text-[var(--text-primary)] font-display">Review Queue</h2>
-          <p className="text-xs text-[var(--text-tertiary)]">Items pending human verification and moderator action.</p>
+      {/* Queue Tabs */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2 text-xs font-medium">
+          <button
+            onClick={() => setActiveTab('origin_disputes')}
+            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
+              activeTab === 'origin_disputes'
+                ? 'bg-[var(--surface-elevated)] text-[var(--text-primary)] font-semibold'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#0095F6]" />
+            Disputed Origin Reviews
+          </button>
+          <button
+            onClick={() => setActiveTab('post_queue')}
+            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
+              activeTab === 'post_queue'
+                ? 'bg-[var(--surface-elevated)] text-[var(--text-primary)] font-semibold'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            Flagged Post Queue
+          </button>
         </div>
-        <ModerationQueue />
+
+        {activeTab === 'origin_disputes' ? (
+          <OriginReviewQueue />
+        ) : (
+          <ModerationQueue />
+        )}
       </div>
     </div>
   );

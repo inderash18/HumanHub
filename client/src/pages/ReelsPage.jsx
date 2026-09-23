@@ -1,263 +1,239 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
-  Heart,
-  MessageSquare,
-  Bookmark,
-  Share2,
+  Heart, 
+  MessageCircle, 
+  Send, 
+  Bookmark, 
+  MoreHorizontal,
+  Volume2, 
+  VolumeX,
+  Music,
   Play,
-  Pause,
-  Sparkles,
-  Volume2,
-  VolumeX
+  Sparkles
 } from 'lucide-react';
-import { toast } from 'react-hot-toast';
 import api from '../services/api';
 import { useAuthStore } from '../store/useAuthStore';
 import UserAvatar from '../components/common/UserAvatar';
 import EmptyState from '../components/common/EmptyState';
+import { toast } from 'react-hot-toast';
 
 export default function ReelsPage() {
   const { user, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
 
-  const [moments, setMoments] = useState([]);
+  const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeReelIndex, setActiveReelIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [likesState, setLikesState] = useState({});
+  const [savedState, setSavedState] = useState({});
 
-  const videoRefs = useRef({});
+  const containerRef = useRef(null);
 
   useEffect(() => {
-    fetchMediaMoments();
+    fetchReels();
   }, []);
 
-  const fetchMediaMoments = async () => {
+  const fetchReels = async () => {
     try {
       setLoading(true);
       const res = await api.get('/posts?limit=30');
       const allPosts = res.data?.data || res.data?.posts || res.data || [];
-      // Filter posts having media
-      const mediaOnly = allPosts.filter(p => p.mediaUrls && p.mediaUrls.length > 0);
-      setMoments(mediaOnly.length > 0 ? mediaOnly : allPosts);
+      // Filter posts with video or images
+      const videoPosts = Array.isArray(allPosts) 
+        ? allPosts.filter(p => p.mediaUrls && p.mediaUrls.length > 0)
+        : [];
+      setReels(videoPosts.length > 0 ? videoPosts : allPosts);
+
+      // Initialize like and save states
+      const initialLikes = {};
+      const initialSaves = {};
+      videoPosts.forEach(p => {
+        initialLikes[p._id] = { liked: Boolean(p.isLiked ?? p.hasLiked), count: p.likesCount || 0 };
+        initialSaves[p._id] = Boolean(p.isSaved);
+      });
+      setLikesState(initialLikes);
+      setSavedState(initialSaves);
     } catch (err) {
-      setMoments([]);
+      setReels([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleToggleLike = async (postId, currentLiked, currentCount) => {
-    if (!isAuthenticated) {
-      return navigate('/?mode=signin');
-    }
-    const nextLiked = !currentLiked;
-    setMoments(prev => prev.map(m => m._id === postId ? {
-      ...m,
-      isLiked: nextLiked,
-      likesCount: nextLiked ? (m.likesCount || 0) + 1 : Math.max(0, (m.likesCount || 0) - 1)
-    } : m));
+  const handleLike = async (reelId) => {
+    if (!isAuthenticated) return navigate('/login');
+    const current = likesState[reelId] || { liked: false, count: 0 };
+    const nextLiked = !current.liked;
+    const nextCount = nextLiked ? current.count + 1 : Math.max(0, current.count - 1);
+
+    setLikesState(prev => ({
+      ...prev,
+      [reelId]: { liked: nextLiked, count: nextCount }
+    }));
 
     try {
-      const res = await api.post(`/posts/${postId}/like`);
+      const res = await api.post(`/posts/${reelId}/like`);
       if (res.data && typeof res.data.likesCount === 'number') {
-        setMoments(prev => prev.map(m => m._id === postId ? {
-          ...m,
-          likesCount: res.data.likesCount,
-          isLiked: res.data.hasLiked
-        } : m));
+        setLikesState(prev => ({
+          ...prev,
+          [reelId]: { liked: res.data.hasLiked, count: res.data.likesCount }
+        }));
       }
-    } catch (err) {
-      toast.error('Failed to update like');
-    }
+    } catch (err) {}
   };
 
-  const handleToggleSave = async (postId, currentSaved) => {
-    if (!isAuthenticated) {
-      return navigate('/?mode=signin');
-    }
-    const nextSaved = !currentSaved;
-    setMoments(prev => prev.map(m => m._id === postId ? { ...m, isSaved: nextSaved } : m));
-
+  const handleSave = async (reelId) => {
+    if (!isAuthenticated) return navigate('/login');
+    const nextSaved = !savedState[reelId];
+    setSavedState(prev => ({ ...prev, [reelId]: nextSaved }));
     try {
-      const res = await api.post(`/posts/${postId}/save`);
-      if (res.data && typeof res.data.isSaved === 'boolean') {
-        setMoments(prev => prev.map(m => m._id === postId ? { ...m, isSaved: res.data.isSaved } : m));
-        toast.success(res.data.isSaved ? 'Saved to bookmarks' : 'Removed from bookmarks');
-      }
-    } catch (err) {
-      toast.error('Failed to save bookmark');
-    }
+      await api.post(`/posts/${reelId}/save`);
+    } catch (err) {}
   };
 
-  const handleShare = (postId) => {
-    const url = `${window.location.origin}/p/${postId}`;
+  const handleShare = (reelId) => {
+    const url = `${window.location.origin}/p/${reelId}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(url);
-      toast.success('Link copied! 📋');
-    }
-  };
-
-  const toggleVideoPlayback = (idx) => {
-    const video = videoRefs.current[idx];
-    if (video) {
-      if (video.paused) {
-        video.play();
-        setIsPlaying(true);
-      } else {
-        video.pause();
-        setIsPlaying(false);
-      }
+      toast.success('Link copied');
     }
   };
 
   return (
-    <div className="w-full max-w-lg mx-auto py-6 px-4 select-none space-y-6">
-      <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
-        <div>
-          <h1 className="font-display text-xl sm:text-2xl font-bold text-[var(--text-primary)]">
-            Visual Moments
-          </h1>
-          <p className="text-xs text-[var(--text-tertiary)]">Explore photography, creative art, and video moments.</p>
-        </div>
-
-        <button
-          onClick={() => setIsMuted(!isMuted)}
-          className="p-2 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-          title={isMuted ? 'Unmute' : 'Mute'}
-        >
-          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-[var(--cyan)]" />}
-        </button>
-      </div>
-
+    <div className="w-full h-[calc(100vh-50px)] md:h-screen flex justify-center bg-[var(--ig-bg)] select-none overflow-hidden">
       {loading ? (
-        <div className="py-20 text-center text-xs text-[var(--text-tertiary)]">
-          Loading visual moments...
+        <div className="flex items-center justify-center h-full">
+          <div className="w-10 h-10 rounded-full border-2 border-[var(--ig-primary-button)] border-t-transparent animate-spin" />
         </div>
-      ) : moments.length > 0 ? (
-        <div className="space-y-8">
-          {moments.map((item, idx) => {
-            const mediaUrl = item.mediaUrls && item.mediaUrls[0];
+      ) : reels.length > 0 ? (
+        <div 
+          ref={containerRef}
+          className="reels-container w-full max-w-[420px] h-full no-scrollbar"
+        >
+          {reels.map((reel, idx) => {
+            const author = reel.author || {};
+            const mediaUrl = reel.mediaUrls && reel.mediaUrls[0];
             const isVideo = mediaUrl && (mediaUrl.endsWith('.mp4') || mediaUrl.endsWith('.webm'));
-            const author = item.author || {};
-            const isLiked = Boolean(item.isLiked ?? item.hasLiked);
-            const isSaved = Boolean(item.isSaved);
+            const likeData = likesState[reel._id] || { liked: false, count: reel.likesCount || 0 };
+            const isSaved = savedState[reel._id] || false;
 
             return (
-              <div
-                key={item._id}
-                className="relative aspect-[4/5] sm:aspect-[9/16] bg-[var(--surface)] border border-[var(--border)] rounded-3xl overflow-hidden shadow-2xl flex flex-col justify-between p-5 group"
+              <div 
+                key={reel._id || idx}
+                className="reel-item relative w-full h-[calc(100vh-50px)] md:h-screen flex items-center justify-center bg-black overflow-hidden"
               >
-                {/* Media Layer */}
+                {/* Reel Media Player */}
                 {mediaUrl ? (
                   isVideo ? (
-                    <video
-                      ref={(el) => (videoRefs.current[idx] = el)}
-                      src={mediaUrl}
-                      autoPlay
-                      loop
+                    <video 
+                      src={mediaUrl} 
+                      autoPlay={idx === activeReelIndex}
+                      loop 
                       muted={isMuted}
                       playsInline
-                      onClick={() => toggleVideoPlayback(idx)}
-                      className="absolute inset-0 w-full h-full object-cover cursor-pointer"
+                      className="w-full h-full object-cover"
                     />
                   ) : (
-                    <img
-                      src={mediaUrl}
-                      alt="Moment media"
-                      className="absolute inset-0 w-full h-full object-cover"
+                    <img 
+                      src={mediaUrl} 
+                      alt="Reel frame" 
+                      className="w-full h-full object-cover"
                     />
                   )
                 ) : (
-                  <div className="absolute inset-0 bg-gradient-to-tr from-[var(--surface-muted)] to-[var(--surface)] flex items-center justify-center p-8 text-center">
-                    <p className="text-sm font-semibold text-[var(--text-primary)] leading-relaxed">
-                      {item.caption || item.body}
-                    </p>
+                  <div className="p-8 text-center text-white text-lg font-medium">
+                    {reel.caption || reel.body}
                   </div>
                 )}
 
-                {/* Ambient vignette overlay */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/85 pointer-events-none" />
+                {/* Sound toggle in top right */}
+                <button
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 z-30 transition-colors"
+                >
+                  {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                </button>
 
-                {/* Top Bar */}
-                <div className="relative z-10 flex items-center justify-between">
-                  <Link
-                    to={`/u/${author.username}`}
-                    className="flex items-center gap-2.5 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/10 hover:border-white/20 transition-all"
-                  >
-                    <UserAvatar
-                      src={author.avatar}
-                      name={author.displayName || author.username}
-                      size="xs"
-                    />
-                    <div>
-                      <p className="text-xs font-bold text-white leading-tight">
-                        {author.displayName || author.username}
-                      </p>
-                      <p className="text-[10px] text-white/70">@{author.username}</p>
-                    </div>
-                  </Link>
-
-                  {item.community && (
-                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[var(--violet)]/80 text-white backdrop-blur-md">
-                      c/{item.community.slug || item.community.name}
-                    </span>
-                  )}
-                </div>
-
-                {/* Bottom Content & Side Action Bar */}
-                <div className="relative z-10 flex items-end justify-between gap-4">
-                  <div className="space-y-1.5 max-w-[75%]">
-                    {item.caption && (
-                      <p className="text-xs text-white leading-relaxed line-clamp-3 font-medium drop-shadow-sm">
-                        {item.caption}
-                      </p>
-                    )}
-                    <span className="text-[10px] text-white/60 block font-mono">
-                      {new Date(item.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                    </span>
+                {/* Right Action Column */}
+                <div className="absolute right-3 bottom-20 z-30 flex flex-col items-center gap-5 text-white">
+                  {/* Like */}
+                  <div className="flex flex-col items-center gap-1">
+                    <button 
+                      onClick={() => handleLike(reel._id)}
+                      className="p-1 hover:opacity-80 transition-transform active:scale-90"
+                    >
+                      <Heart className={`w-7 h-7 stroke-[2] ${likeData.liked ? 'fill-[var(--ig-like)] text-[var(--ig-like)]' : ''}`} />
+                    </button>
+                    <span className="text-xs font-semibold">{likeData.count}</span>
                   </div>
 
-                  {/* Vertical Action Column */}
-                  <div className="flex flex-col items-center gap-3">
-                    <button
-                      onClick={() => handleToggleLike(item._id, isLiked, item.likesCount)}
-                      className={`p-3 rounded-2xl backdrop-blur-md transition-transform active:scale-90 flex flex-col items-center gap-1 ${
-                        isLiked ? 'bg-[var(--accent)] text-white' : 'bg-black/50 border border-white/10 text-white hover:bg-black/70'
-                      }`}
-                      title="Like"
+                  {/* Comment */}
+                  <div className="flex flex-col items-center gap-1">
+                    <button 
+                      onClick={() => navigate(`/p/${reel._id}`)}
+                      className="p-1 hover:opacity-80 transition-transform active:scale-90"
                     >
-                      <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
-                      <span className="text-[10px] font-bold font-mono">{item.likesCount || 0}</span>
+                      <MessageCircle className="w-7 h-7 stroke-[2]" />
                     </button>
+                    <span className="text-xs font-semibold">{reel.commentsCount || (reel.comments?.length || 0)}</span>
+                  </div>
 
-                    <Link
-                      to={`/p/${item._id}`}
-                      className="p-3 rounded-2xl bg-black/50 border border-white/10 text-white hover:bg-black/70 backdrop-blur-md transition-transform active:scale-90 flex flex-col items-center gap-1"
-                      title="Comments"
-                    >
-                      <MessageSquare className="w-5 h-5 text-[var(--cyan)]" />
-                      <span className="text-[10px] font-bold font-mono">{item.commentsCount || 0}</span>
+                  {/* Share */}
+                  <button 
+                    onClick={() => handleShare(reel._id)}
+                    className="p-1 hover:opacity-80 transition-transform active:scale-90"
+                  >
+                    <Send className="w-7 h-7 stroke-[2]" />
+                  </button>
+
+                  {/* Save */}
+                  <button 
+                    onClick={() => handleSave(reel._id)}
+                    className="p-1 hover:opacity-80 transition-transform active:scale-90"
+                  >
+                    <Bookmark className={`w-7 h-7 stroke-[2] ${isSaved ? 'fill-white' : ''}`} />
+                  </button>
+
+                  {/* More */}
+                  <button 
+                    onClick={() => navigate(`/p/${reel._id}`)}
+                    className="p-1 hover:opacity-80"
+                  >
+                    <MoreHorizontal className="w-6 h-6" />
+                  </button>
+                </div>
+
+                {/* Bottom Overlay: Creator, Caption, Audio */}
+                <div className="absolute left-3 right-16 bottom-6 z-30 text-white space-y-2.5">
+                  <div className="flex items-center gap-3">
+                    <Link to={`/u/${author.username}`}>
+                      <UserAvatar 
+                        src={author.avatar} 
+                        name={author.displayName || author.username} 
+                        size="sm"
+                        hasStory={true}
+                      />
                     </Link>
-
-                    <button
-                      onClick={() => handleToggleSave(item._id, isSaved)}
-                      className={`p-3 rounded-2xl backdrop-blur-md transition-transform active:scale-90 ${
-                        isSaved ? 'bg-[var(--accent)] text-white' : 'bg-black/50 border border-white/10 text-white hover:bg-black/70'
-                      }`}
-                      title="Save"
-                    >
-                      <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+                    <Link to={`/u/${author.username}`} className="text-sm font-semibold hover:underline">
+                      {author.username || 'user'}
+                    </Link>
+                    <button className="border border-white/40 text-xs font-semibold px-3 py-1 rounded-lg hover:bg-white/10 transition-colors">
+                      Follow
                     </button>
+                  </div>
 
-                    <button
-                      onClick={() => handleShare(item._id)}
-                      className="p-3 rounded-2xl bg-black/50 border border-white/10 text-white hover:bg-black/70 backdrop-blur-md transition-transform active:scale-90"
-                      title="Share"
-                    >
-                      <Share2 className="w-5 h-5" />
-                    </button>
+                  {reel.caption && (
+                    <p className="text-xs sm:text-sm text-white/90 line-clamp-2 leading-relaxed">
+                      {reel.caption}
+                    </p>
+                  )}
+
+                  {/* Audio Track Tag */}
+                  <div className="flex items-center gap-2 text-xs text-white/80 bg-black/30 backdrop-blur-sm px-2.5 py-1 rounded-full w-fit">
+                    <Music className="w-3.5 h-3.5" />
+                    <span className="truncate max-w-[200px]">Original audio • {author.username || 'HumanHub'}</span>
                   </div>
                 </div>
               </div>
@@ -265,11 +241,13 @@ export default function ReelsPage() {
           })}
         </div>
       ) : (
-        <EmptyState
-          icon={Sparkles}
-          title="No Visual Moments Yet"
-          description="Photos and video moments shared by the community will appear here."
-        />
+        <div className="flex items-center justify-center h-full">
+          <EmptyState 
+            icon={Sparkles}
+            title="No Reels yet"
+            description="Moments in full vertical format will appear here."
+          />
+        </div>
       )}
     </div>
   );

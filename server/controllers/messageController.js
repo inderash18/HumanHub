@@ -1,9 +1,12 @@
+import mongoose from 'mongoose';
 import asyncHandler from '../utils/asyncHandler.js';
 import Message from '../models/Message.js';
 import Conversation from '../models/Conversation.js';
 import User from '../models/User.js';
+import Block from '../models/Block.js';
 import Notification from '../models/Notification.js';
 import { getIO } from '../socket/socketHandler.js';
+import { canMessage } from '../policies/authorization.js';
 
 // @desc    Send a new message
 // @route   POST /api/messages
@@ -13,18 +16,29 @@ export const sendMessage = asyncHandler(async (req, res) => {
   const targetId = receiverId || recipientId;
   const content = (text || body || '').trim();
 
-  if (!targetId || !content) {
+  if (!targetId || !mongoose.Types.ObjectId.isValid(targetId) || !content) {
     res.status(400);
-    throw new Error('Recipient ID and message content are required');
+    throw new Error('Valid recipient ID and message content are required');
+  }
+
+  if (content.length > 2000) {
+    res.status(400);
+    throw new Error('Message length exceeds the 2,000 character limit.');
   }
 
   const recipient = await User.findById(targetId);
-  if (!recipient) {
+  if (!recipient || recipient.isBanned) {
     res.status(404);
     throw new Error('Recipient user not found');
   }
 
-  if (recipient.isBanned || recipient.privacySettings?.allowDirectMessages === false) {
+  // Check bidirectional blocking
+  const isBlocked = await Block.isBlocked(req.user._id, targetId);
+  if (isBlocked) {
+    return res.status(403).json({ message: 'Cannot send message to this user due to privacy/blocking settings.' });
+  }
+
+  if (recipient.privacySettings?.allowDirectMessages === false && req.user.role !== 'admin') {
     return res.status(403).json({ message: 'This user is not accepting messages.' });
   }
 
@@ -36,12 +50,12 @@ export const sendMessage = asyncHandler(async (req, res) => {
   if (!conversation) {
     conversation = await Conversation.create({
       participants: [req.user._id, targetId],
-      lastMessage: content,
+      lastMessage: content.slice(0, 100),
       lastSender: req.user._id,
       lastMessageAt: new Date()
     });
   } else {
-    conversation.lastMessage = content;
+    conversation.lastMessage = content.slice(0, 100);
     conversation.lastSender = req.user._id;
     conversation.lastMessageAt = new Date();
     await conversation.save();
@@ -89,6 +103,17 @@ export const getMessages = asyncHandler(async (req, res) => {
   const otherUserId = req.params.userId;
   const currentUserId = req.user._id;
 
+  if (!mongoose.Types.ObjectId.isValid(otherUserId)) {
+    res.status(400);
+    throw new Error('Invalid user ID');
+  }
+
+  // Check blocking
+  const isBlocked = await Block.isBlocked(currentUserId, otherUserId);
+  if (isBlocked && req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Access denied.' });
+  }
+
   const messages = await Message.find({
     $or: [
       { sender: currentUserId, recipient: otherUserId },
@@ -122,7 +147,9 @@ export const getConversations = asyncHandler(async (req, res) => {
 
   const formatted = await Promise.all(
     conversations.map(async (conv) => {
-      const otherUser = conv.participants.find(p => p._id.toString() !== currentUserId.toString()) || conv.participants[0];
+      const otherUser = conv.participants.find(p => p && p._id && p._id.toString() !== currentUserId.toString()) || conv.participants[0];
+      if (!otherUser) return null;
+
       const unreadCount = await Message.countDocuments({
         sender: otherUser._id,
         recipient: currentUserId,
@@ -141,7 +168,7 @@ export const getConversations = asyncHandler(async (req, res) => {
     })
   );
 
-  res.status(200).json(formatted);
+  res.status(200).json(formatted.filter(Boolean));
 });
 
 // @desc    Get total unread messages count

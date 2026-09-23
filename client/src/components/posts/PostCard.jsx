@@ -2,34 +2,50 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   Heart,
-  MessageSquare,
-  Share2,
+  MessageCircle,
+  Send,
   Bookmark,
   MoreHorizontal,
-  Send,
-  Trash2
+  Smile,
+  Trash2,
+  Share2,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/useAuthStore';
 import api from '../../services/api';
 import UserAvatar from '../common/UserAvatar';
-import Button from '../ui/Button';
+import ImageOriginBadge from '../media/ImageOriginBadge';
+import ImageOriginEvidenceModal from '../media/ImageOriginEvidenceModal';
+import { useSocketStore } from '../../store/useSocketStore';
 
 export default function PostCard({ post, onUpdate }) {
   const { user, isAuthenticated } = useAuthStore();
+  const socket = useSocketStore(s => s.socket);
   const navigate = useNavigate();
 
   const [isLiked, setIsLiked] = useState(Boolean(post.isLiked ?? post.hasLiked));
   const [likesCount, setLikesCount] = useState(post.likesCount || 0);
   const [isSaved, setIsSaved] = useState(Boolean(post.isSaved));
   const [showHeartAnim, setShowHeartAnim] = useState(false);
+  
   const [commentText, setCommentText] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [comments, setComments] = useState(post.comments || []);
   const [commentsCount, setCommentsCount] = useState(post.commentsCount || (post.comments?.length || 0));
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
-  const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [loadedComments, setLoadedComments] = useState(false);
+
+  const [isExpandedCaption, setIsExpandedCaption] = useState(false);
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+
+  // Media Origin Analysis State
+  const [mediaAnalysisMap, setMediaAnalysisMap] = useState({});
+  const [selectedAnalysis, setSelectedAnalysis] = useState(null);
+  const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
 
   useEffect(() => {
     setIsLiked(Boolean(post.isLiked ?? post.hasLiked));
@@ -37,31 +53,71 @@ export default function PostCard({ post, onUpdate }) {
     setIsSaved(Boolean(post.isSaved));
     setComments(post.comments || []);
     setCommentsCount(post.commentsCount || (post.comments?.length || 0));
-  }, [post._id, post.isLiked, post.hasLiked, post.likesCount, post.isSaved, post.commentsCount]);
+
+    // Initialize media analysis from populated post data
+    if (Array.isArray(post.mediaAnalysis) && post.mediaAnalysis.length > 0) {
+      const map = {};
+      post.mediaAnalysis.forEach(item => {
+        if (item && item.mediaUrl) {
+          map[item.mediaUrl] = item;
+        }
+      });
+      setMediaAnalysisMap(map);
+    }
+  }, [post._id, post.isLiked, post.hasLiked, post.likesCount, post.isSaved, post.commentsCount, post.mediaAnalysis]);
+
+  // Listen for real-time origin analysis updates via Socket.io
+  useEffect(() => {
+    if (!socket) return;
+    const handleAnalysisUpdate = (data) => {
+      if (data && data.mediaId) {
+        setMediaAnalysisMap(prev => {
+          const updated = { ...prev };
+          // Find matching key by mediaId or update all matching
+          Object.keys(updated).forEach(url => {
+            if (updated[url].mediaId === data.mediaId) {
+              updated[url] = { ...updated[url], ...data };
+            }
+          });
+          return updated;
+        });
+      }
+    };
+
+    socket.on('media:analysis:updated', handleAnalysisUpdate);
+    return () => {
+      socket.off('media:analysis:updated', handleAnalysisUpdate);
+    };
+  }, [socket]);
 
   const author = post.author || {};
   const mediaUrls = post.mediaUrls || [];
-  const primaryMedia = mediaUrls[0];
-  const isVideo = primaryMedia && (primaryMedia.endsWith('.mp4') || primaryMedia.endsWith('.webm'));
+  const hasMultipleMedia = mediaUrls.length > 1;
+  const currentMedia = mediaUrls[activeMediaIndex] || mediaUrls[0];
+  const isVideo = currentMedia && (currentMedia.endsWith('.mp4') || currentMedia.endsWith('.webm'));
   const isOwner = user && author && (author._id === user._id || author === user._id);
 
+  // Get current media analysis record
+  const currentAnalysis = currentMedia ? (mediaAnalysisMap[currentMedia] || post.mediaAnalysis?.[activeMediaIndex]) : null;
+
   const formatTimestamp = (dateStr) => {
-    if (!dateStr) return 'Just now';
+    if (!dateStr) return 'JUST NOW';
     const date = new Date(dateStr);
     const now = new Date();
     const diffSecs = Math.floor((now - date) / 1000);
-    if (diffSecs < 60) return `${Math.max(1, diffSecs)}s ago`;
+    if (diffSecs < 60) return `${Math.max(1, diffSecs)}s AGO`;
     const diffMins = Math.floor(diffSecs / 60);
-    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 60) return `${diffMins}m AGO`;
     const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffHours < 24) return `${diffHours}h AGO`;
     const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
+    if (diffDays < 7) return `${diffDays}d AGO`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
   };
 
   const handleLike = async () => {
     if (!isAuthenticated) {
-      toast.error('Please log in to like moments');
+      toast.error('Please log in to like posts');
       return navigate('/login');
     }
 
@@ -78,14 +134,13 @@ export default function PostCard({ post, onUpdate }) {
     } catch (err) {
       setIsLiked(!nextLiked);
       setLikesCount((prev) => !nextLiked ? prev + 1 : Math.max(0, prev - 1));
-      toast.error('Failed to update like');
     }
   };
 
   const handleDoubleTap = () => {
     if (!isLiked) handleLike();
     setShowHeartAnim(true);
-    setTimeout(() => setShowHeartAnim(false), 700);
+    setTimeout(() => setShowHeartAnim(false), 800);
   };
 
   const handleSaveToggle = async () => {
@@ -100,11 +155,9 @@ export default function PostCard({ post, onUpdate }) {
       const res = await api.post(`/posts/${post._id}/save`);
       if (res.data && typeof res.data.isSaved === 'boolean') {
         setIsSaved(res.data.isSaved);
-        toast.success(res.data.isSaved ? 'Saved to bookmarks' : 'Removed from bookmarks');
       }
     } catch (err) {
       setIsSaved(!nextSaved);
-      toast.error('Failed to update bookmark');
     }
   };
 
@@ -112,7 +165,7 @@ export default function PostCard({ post, onUpdate }) {
     if (!loadedComments) {
       try {
         const res = await api.get(`/comments/${post._id}`);
-        setComments(res.data || []);
+        setComments(Array.isArray(res.data) ? res.data : []);
         setLoadedComments(true);
       } catch (err) {}
     }
@@ -138,7 +191,6 @@ export default function PostCard({ post, onUpdate }) {
       setComments((prev) => [...prev, res.data]);
       setCommentsCount((prev) => prev + 1);
       setCommentText('');
-      toast.success('Comment posted ✨');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to post comment');
     } finally {
@@ -147,10 +199,10 @@ export default function PostCard({ post, onUpdate }) {
   };
 
   const handleDeletePost = async () => {
-    if (!window.confirm('Are you sure you want to delete this post?')) return;
+    if (!window.confirm('Delete post?')) return;
     try {
       await api.delete(`/posts/${post._id}`);
-      toast.success('Post removed');
+      toast.success('Post deleted');
       setShowOptionsModal(false);
       if (onUpdate) onUpdate();
     } catch (err) {
@@ -158,63 +210,223 @@ export default function PostCard({ post, onUpdate }) {
     }
   };
 
-  const handleShare = () => {
+  const handleCopyLink = () => {
     const url = `${window.location.origin}/p/${post._id}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(url);
-      toast.success('Link copied to clipboard! 📋');
+      toast.success('Link copied to clipboard');
+      setShowOptionsModal(false);
+    }
+  };
+
+  const handleOpenEvidence = () => {
+    if (currentAnalysis) {
+      setSelectedAnalysis(currentAnalysis);
+      setIsEvidenceModalOpen(true);
     }
   };
 
   const postText = post.caption || post.body || '';
+  const shouldTruncateCaption = postText.length > 90 && !isExpandedCaption;
 
   return (
-    <article className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-3xl overflow-hidden shadow-xl hover:border-[var(--border-subtle)] transition-all select-none mb-5">
-      {/* Author Header */}
-      <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[var(--border)]">
+    <article className="w-full bg-[var(--ig-bg)] border-b border-[var(--ig-border)] md:border md:rounded-xl md:mb-5 pb-2 select-none">
+      
+      {/* 1. Post Header */}
+      <div className="flex items-center justify-between px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-3">
           <Link to={`/u/${author.username}`}>
             <UserAvatar 
               src={author.avatar}
               name={author.displayName || author.username}
               size="sm"
+              hasStory={true}
             />
           </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <Link to={`/u/${author.username}`} className="font-bold text-xs text-[var(--text-primary)] hover:underline truncate max-w-[160px]">
-                {author.displayName || author.username || 'member'}
-              </Link>
-              {post.community && (
-                <Link to={`/c/${post.community.slug}`} className="text-[11px] font-semibold text-[var(--violet)] hover:underline">
-                  in c/{post.community.name}
-                </Link>
-              )}
-            </div>
-            <span className="text-[10px] text-[var(--text-tertiary)]">
-              @{author.username} • {formatTimestamp(post.createdAt)}
+          <div className="flex items-center gap-1.5 text-xs sm:text-sm">
+            <Link to={`/u/${author.username}`} className="font-semibold text-[var(--ig-text-primary)] hover:opacity-80">
+              {author.username || 'user'}
+            </Link>
+            <span className="text-[var(--ig-text-tertiary)]">•</span>
+            <span className="text-[var(--ig-text-tertiary)] text-xs">
+              {formatTimestamp(post.createdAt).toLowerCase().replace(' ago', '')}
             </span>
+            {post.community && (
+              <>
+                <span className="text-[var(--ig-text-tertiary)]">•</span>
+                <Link to={`/c/${post.community.slug}`} className="text-xs font-semibold text-[var(--ig-text-secondary)] hover:underline">
+                  c/{post.community.name}
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
         <button 
           onClick={() => setShowOptionsModal(true)} 
-          className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] p-1.5 rounded-xl hover:bg-[var(--surface-elevated)] transition-colors"
+          className="text-[var(--ig-text-primary)] hover:opacity-60 p-1.5"
+          title="More options"
         >
-          <MoreHorizontal className="w-4 h-4" />
+          <MoreHorizontal className="w-5 h-5" />
         </button>
       </div>
 
-      {/* Caption Text Content */}
-      {postText && (
-        <div className="px-5 pt-4 pb-2">
-          <p className="text-xs sm:text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-line">
+      {/* 2. Media Area (Square 1:1 or 4:5) */}
+      {currentMedia ? (
+        <div 
+          onDoubleClick={handleDoubleTap}
+          className="relative w-full aspect-square sm:aspect-[4/5] bg-black overflow-hidden flex items-center justify-center cursor-pointer group"
+        >
+          {isVideo ? (
+            <video 
+              src={currentMedia} 
+              controls 
+              className="w-full h-full object-cover" 
+            />
+          ) : (
+            <img 
+              src={currentMedia} 
+              alt={postText || 'Post photo'} 
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          )}
+
+          {/* Image Origin & Provenance Status Badge */}
+          {currentAnalysis && (
+            <div className="absolute top-3 left-3 z-20">
+              <ImageOriginBadge
+                outcome={currentAnalysis.analysisOutcome}
+                evidence={currentAnalysis.evidence}
+                processingState={currentAnalysis.processingState}
+                onClick={handleOpenEvidence}
+                size="sm"
+              />
+            </div>
+          )}
+
+          {/* Carousel Arrows */}
+          {hasMultipleMedia && activeMediaIndex > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setActiveMediaIndex(activeMediaIndex - 1); }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors z-10"
+            >
+              <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
+            </button>
+          )}
+
+          {hasMultipleMedia && activeMediaIndex < mediaUrls.length - 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setActiveMediaIndex(activeMediaIndex + 1); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors z-10"
+            >
+              <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+            </button>
+          )}
+
+          {/* Double Tap Heart Overlay */}
+          {showHeartAnim && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+              <Heart className="w-24 h-24 fill-[var(--ig-like)] text-[var(--ig-like)] drop-shadow-2xl animate-heart-pop" />
+            </div>
+          )}
+        </div>
+      ) : postText ? (
+        <div className="px-4 py-6 bg-[var(--ig-elevated)] border-y border-[var(--ig-border)]">
+          <p className="text-base text-[var(--ig-text-primary)] font-normal leading-relaxed">
             {postText}
           </p>
+        </div>
+      ) : null}
+
+      {/* 3. Action Toolbar */}
+      <div className="px-3 pt-3 pb-1 sm:px-4 flex items-center justify-between">
+        <div className="flex items-center gap-4 text-[var(--ig-text-primary)]">
+          {/* Like */}
+          <button 
+            onClick={handleLike} 
+            className="hover:opacity-60 transition-transform active:scale-90"
+            title={isLiked ? 'Unlike' : 'Like'}
+          >
+            <Heart 
+              className={`w-6 h-6 stroke-[1.8] ${isLiked ? 'fill-[var(--ig-like)] text-[var(--ig-like)]' : ''}`} 
+            />
+          </button>
+
+          {/* Comment */}
+          <button 
+            onClick={toggleComments} 
+            className="hover:opacity-60 transition-transform active:scale-90"
+            title="Comment"
+          >
+            <MessageCircle className="w-6 h-6 stroke-[1.8]" />
+          </button>
+
+          {/* Share */}
+          <button 
+            onClick={handleCopyLink} 
+            className="hover:opacity-60 transition-transform active:scale-90"
+            title="Share"
+          >
+            <Send className="w-6 h-6 stroke-[1.8]" />
+          </button>
+        </div>
+
+        {/* Carousel Pagination Dots */}
+        {hasMultipleMedia && (
+          <div className="flex items-center gap-1">
+            {mediaUrls.map((_, idx) => (
+              <div 
+                key={idx}
+                className={`w-1.5 h-1.5 rounded-full transition-all ${
+                  idx === activeMediaIndex ? 'bg-[var(--ig-primary-button)]' : 'bg-[var(--ig-text-tertiary)]'
+                }`}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Bookmark */}
+        <button 
+          onClick={handleSaveToggle} 
+          className="hover:opacity-60 text-[var(--ig-text-primary)] transition-transform active:scale-90"
+          title={isSaved ? 'Remove from saved' : 'Save'}
+        >
+          <Bookmark 
+            className={`w-6 h-6 stroke-[1.8] ${isSaved ? 'fill-current' : ''}`} 
+          />
+        </button>
+      </div>
+
+      {/* 4. Likes Count */}
+      <div className="px-3 pt-1.5 sm:px-4">
+        <span className="text-sm font-semibold text-[var(--ig-text-primary)]">
+          {likesCount.toLocaleString()} {likesCount === 1 ? 'like' : 'likes'}
+        </span>
+      </div>
+
+      {/* 5. Caption */}
+      {postText && currentMedia && (
+        <div className="px-3 pt-1 text-sm sm:px-4 leading-normal">
+          <Link to={`/u/${author.username}`} className="font-semibold text-[var(--ig-text-primary)] mr-2">
+            {author.username || 'user'}
+          </Link>
+          <span className="text-[var(--ig-text-primary)] whitespace-pre-line">
+            {shouldTruncateCaption ? `${postText.slice(0, 90)}...` : postText}
+          </span>
+          {shouldTruncateCaption && (
+            <button 
+              onClick={() => setIsExpandedCaption(true)}
+              className="text-xs text-[var(--ig-text-tertiary)] ml-1 hover:underline font-normal"
+            >
+              more
+            </button>
+          )}
+
           {post.tags && post.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-2">
+            <div className="flex flex-wrap gap-1 mt-1">
               {post.tags.map((tag) => (
-                <Link key={tag} to={`/explore?tag=${tag}`} className="text-[11px] font-semibold text-[var(--cyan)] hover:underline">
+                <Link key={tag} to={`/explore?tag=${tag}`} className="text-xs text-[var(--ig-text-link)] hover:underline">
                   #{tag}
                 </Link>
               ))}
@@ -223,160 +435,118 @@ export default function PostCard({ post, onUpdate }) {
         </div>
       )}
 
-      {/* Media Content (Image or Video) */}
-      {primaryMedia && (
-        <div 
-          onDoubleClick={handleDoubleTap}
-          className="relative w-full aspect-video sm:aspect-[16/10] bg-[var(--surface-elevated)] overflow-hidden flex items-center justify-center cursor-pointer my-2 border-y border-[var(--border)]"
-        >
-          {isVideo ? (
-            <video 
-              src={primaryMedia} 
-              controls 
-              className="w-full h-full object-cover" 
-            />
-          ) : (
-            <img 
-              src={primaryMedia} 
-              alt={postText || 'Post media'} 
-              className="w-full h-full object-cover"
-              loading="lazy"
-            />
-          )}
-
-          {/* Double Tap Heart Animation */}
-          {showHeartAnim && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-              <Heart className="text-[var(--accent)] w-20 h-20 fill-current drop-shadow-2xl animate-scale-in" />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Action Toolbar */}
-      <div className="px-4 py-2.5 flex items-center justify-between border-t border-[var(--border)] bg-[var(--surface-elevated)]/40">
-        <div className="flex items-center gap-2">
-          {/* Like Action */}
-          <button 
-            onClick={handleLike}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
-              isLiked 
-                ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm' 
-                : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)]'
-            }`}
-          >
-            <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-current' : ''}`} />
-            <span className="font-mono-code">{likesCount}</span>
-          </button>
-
-          {/* Comments Toggle */}
+      {/* 6. Comments Summary Link */}
+      {commentsCount > 0 && (
+        <div className="px-3 pt-1 sm:px-4">
           <button 
             onClick={toggleComments}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] transition-colors"
+            className="text-xs sm:text-sm text-[var(--ig-text-tertiary)] hover:underline"
           >
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span className="font-mono-code">{commentsCount}</span>
+            View all {commentsCount} comments
           </button>
-
-          {/* Share Action */}
-          <button 
-            onClick={handleShare}
-            className="p-2 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] transition-colors text-xs"
-            title="Copy link"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Bookmark Action */}
-        <button 
-          onClick={handleSaveToggle}
-          className={`p-2 rounded-xl border text-xs transition-colors ${
-            isSaved 
-              ? 'bg-[var(--accent)] text-white border-[var(--accent)]' 
-              : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)]'
-          }`}
-          title={isSaved ? 'Saved in library' : 'Save post'}
-        >
-          <Bookmark className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} />
-        </button>
-      </div>
-
-      {/* Comments Drawer */}
-      {isCommentsOpen && (
-        <div className="px-4 pb-4 pt-3 border-t border-[var(--border)] bg-[var(--surface-elevated)]/60 space-y-3 animate-fade-in">
-          <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-            {comments.length > 0 ? (
-              comments.map((c, i) => (
-                <div key={c._id || i} className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--border)] text-xs">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <UserAvatar src={c.author?.avatar} name={c.author?.displayName || c.author?.username} size="xs" />
-                      <span className="font-bold text-[var(--text-primary)]">@{c.author?.username || 'member'}</span>
-                    </div>
-                    <span className="text-[10px] text-[var(--text-tertiary)]">{formatTimestamp(c.createdAt)}</span>
-                  </div>
-                  <p className="text-[var(--text-secondary)] pl-6">{c.text || c.body}</p>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-[var(--text-tertiary)] text-center py-3">No comments yet. Start the conversation below!</p>
-            )}
-          </div>
-
-          <form onSubmit={handleCommentSubmit} className="flex items-center gap-2 pt-1">
-            <input 
-              type="text"
-              placeholder="Add a comment..."
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              className="flex-1 bg-[var(--surface)] border border-[var(--border)] text-xs text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] rounded-xl px-3.5 py-2.5 outline-none focus:border-[var(--accent)]"
-            />
-            <Button 
-              type="submit"
-              size="sm"
-              variant="primary"
-              disabled={isSubmittingComment || !commentText.trim()}
-              icon={Send}
-            >
-              Post
-            </Button>
-          </form>
         </div>
       )}
 
-      {/* Options Modal */}
+      {/* 7. Inline Comments Drawer (if expanded) */}
+      {isCommentsOpen && (
+        <div className="px-3 sm:px-4 py-2 space-y-2 border-t border-[var(--ig-border)] mt-2">
+          {comments.map((c, i) => (
+            <div key={c._id || i} className="text-xs sm:text-sm leading-snug">
+              <Link to={`/u/${c.author?.username}`} className="font-semibold text-[var(--ig-text-primary)] mr-2">
+                {c.author?.username || 'member'}
+              </Link>
+              <span className="text-[var(--ig-text-primary)]">{c.text || c.body}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 8. Timestamp */}
+      <div className="px-3 pt-1 sm:px-4">
+        <span className="text-[10px] uppercase font-normal text-[var(--ig-text-tertiary)] tracking-wider">
+          {formatTimestamp(post.createdAt)}
+        </span>
+      </div>
+
+      {/* 9. Add Comment Input Row */}
+      <form onSubmit={handleCommentSubmit} className="hidden sm:flex items-center px-4 pt-3 mt-2 border-t border-[var(--ig-border)] gap-2">
+        <Smile className="w-5 h-5 text-[var(--ig-text-tertiary)] hover:text-[var(--ig-text-primary)] cursor-pointer" />
+        <input 
+          type="text"
+          placeholder="Add a comment..."
+          value={commentText}
+          onChange={(e) => setCommentText(e.target.value)}
+          className="flex-1 bg-transparent text-sm text-[var(--ig-text-primary)] placeholder:text-[var(--ig-text-tertiary)] outline-none"
+        />
+        <button
+          type="submit"
+          disabled={!commentText.trim() || isSubmittingComment}
+          className="text-sm font-semibold text-[var(--ig-primary-button)] hover:text-[var(--ig-primary-button-hover)] disabled:opacity-0 transition-opacity"
+        >
+          Post
+        </button>
+      </form>
+
+      {/* Options Modal Dialog */}
       {showOptionsModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-[var(--surface)] border border-[var(--border)] rounded-3xl overflow-hidden p-2 divide-y divide-[var(--border)] animate-fade-in shadow-2xl">
-            <button 
-              onClick={() => { setShowOptionsModal(false); handleShare(); }}
-              className="w-full py-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] rounded-xl text-center"
-            >
-              Copy Link
-            </button>
-            <button 
-              onClick={() => { setShowOptionsModal(false); navigate(`/p/${post._id}`); }}
-              className="w-full py-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] rounded-xl text-center"
-            >
-              View Full Post
-            </button>
+        <div 
+          onClick={() => setShowOptionsModal(false)}
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 animate-fade-in"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-[400px] bg-[var(--ig-elevated)] border border-[var(--ig-border)] rounded-2xl overflow-hidden divide-y divide-[var(--ig-border)] shadow-2xl text-center text-sm"
+          >
+            {currentAnalysis && (
+              <button
+                onClick={() => { setShowOptionsModal(false); handleOpenEvidence(); }}
+                className="w-full py-3.5 font-semibold text-[var(--ig-text-primary)] hover:bg-[var(--ig-hover)] transition-colors"
+              >
+                Inspect image origin & credentials
+              </button>
+            )}
             {isOwner && (
               <button 
                 onClick={handleDeletePost}
-                className="w-full py-2.5 text-xs font-bold text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded-xl text-center flex items-center justify-center gap-1.5"
+                className="w-full py-3.5 font-bold text-red-500 hover:bg-[var(--ig-hover)] transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5" /> Delete Post
+                Delete
               </button>
             )}
             <button 
+              onClick={() => { setShowOptionsModal(false); navigate(`/p/${post._id}`); }}
+              className="w-full py-3.5 font-semibold text-[var(--ig-text-primary)] hover:bg-[var(--ig-hover)] transition-colors"
+            >
+              Go to post
+            </button>
+            <button 
+              onClick={handleCopyLink}
+              className="w-full py-3.5 font-semibold text-[var(--ig-text-primary)] hover:bg-[var(--ig-hover)] transition-colors"
+            >
+              Copy link
+            </button>
+            <button 
               onClick={() => setShowOptionsModal(false)}
-              className="w-full py-2.5 text-xs font-medium text-[var(--text-tertiary)] hover:bg-[var(--surface-elevated)] rounded-xl text-center"
+              className="w-full py-3.5 font-normal text-[var(--ig-text-primary)] hover:bg-[var(--ig-hover)] transition-colors"
             >
               Cancel
             </button>
           </div>
         </div>
+      )}
+
+      {/* Evidence Modal */}
+      {isEvidenceModalOpen && selectedAnalysis && (
+        <ImageOriginEvidenceModal
+          isOpen={isEvidenceModalOpen}
+          onClose={() => setIsEvidenceModalOpen(false)}
+          analysisData={selectedAnalysis}
+          mediaUrl={currentMedia}
+          isAuthor={isOwner}
+          onReviewSubmitted={() => {
+            if (onUpdate) onUpdate();
+          }}
+        />
       )}
     </article>
   );

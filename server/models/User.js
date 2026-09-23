@@ -27,6 +27,14 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  passwordVersion: {
+    type: Number,
+    default: 1
+  },
+  lastPasswordChange: {
+    type: Date,
+    default: Date.now
+  },
   role: {
     type: String,
     enum: ['user', 'moderator', 'admin'],
@@ -64,6 +72,24 @@ const userSchema = new mongoose.Schema({
   privacySettings: {
     isPrivate: { type: Boolean, default: false },
     allowDirectMessages: { type: Boolean, default: true }
+  },
+  mfa: {
+    enabled: { type: Boolean, default: false },
+    secretEncrypted: { type: mongoose.Schema.Types.Mixed, default: null },
+    backupCodes: [{
+      codeHash: { type: String, required: true },
+      used: { type: Boolean, default: false },
+      usedAt: { type: Date }
+    }],
+    lastUsedTimestep: { type: Number, default: 0 },
+    passkeys: [{
+      credentialID: { type: String, required: true },
+      publicKey: { type: String, required: true },
+      counter: { type: Number, default: 0 },
+      name: { type: String, default: 'Passkey' },
+      createdAt: { type: Date, default: Date.now }
+    }],
+    pendingChallenge: { type: String }
   }
 }, { timestamps: true });
 

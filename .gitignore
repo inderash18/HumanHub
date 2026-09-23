@@ -1,46 +1,95 @@
-# Dependencies
+# ==========================================
+# HumanHub Comprehensive .gitignore
+# ==========================================
+
+# 1. Node.js & Frontend
 node_modules/
 */node_modules/
+**/node_modules/
+dist/
+*/dist/
+build/
+*/build/
+.vite/
+*/.vite/
+.turbo/
+.cache/
+coverage/
+*/coverage/
+*.tsbuildinfo
 package-lock.json.bak
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Python Virtual Environments & Caches
+# 2. Python, Machine Learning & AI
 venv/
+*/venv/
 .venv/
+*/.venv/
 env/
+*/env/
+ENV/
 __pycache__/
 */__pycache__/
 */**/__pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+.eggs/
 
-# Build & Output
-dist/
-build/
-*.log
-*_log.txt
-*_output.txt
+# Large Model Weights & Checkpoints (Keep directory structure via .gitkeep)
+ai_services/checkpoints/*
+!ai_services/checkpoints/.gitkeep
+models/*
+!models/.gitkeep
 
-# Local uploads & Temporary files
+# 3. Local Runtime Uploads, Storage & Logs
 uploads/*
 !uploads/.gitkeep
 server/uploads/*
 !server/uploads/.gitkeep
 tmp/
 temp/
+logs/
+*.log
+*_log.txt
+*_output.txt
 
-# Environment Variables & Secrets
+# 4. Environment Variables, Certificates & Credentials
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+!.env.*.example
 *.pem
+*.key
+*.crt
+*.pfx
+*.p12
 
-# IDE & OS Metadata
+# 5. Database Snapshots & Local Volumes
+mongo_data/
+pg_data/
+redis_data/
+*.sqlite
+*.sqlite3
+
+# 6. Operating System & Editor Metadata
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 .idea/
 .vscode/
 *.sublime-project
 *.sublime-workspace
+*.swp
+*.swo
+*~

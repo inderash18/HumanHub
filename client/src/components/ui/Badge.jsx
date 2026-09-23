@@ -1,7 +1,7 @@
 import React from 'react';
 
 /**
- * HumanHub Design System Badge component
+ * HumanHub Design System Badge component (Instagram Refined Edition)
  */
 export default function Badge({
   children,
@@ -10,24 +10,22 @@ export default function Badge({
   className = '',
   icon: Icon
 }) {
-  const baseClasses = 'inline-flex items-center font-mono-code font-bold uppercase tracking-wider rounded-full select-none';
+  const baseClasses = 'inline-flex items-center font-medium rounded-md select-none transition-all duration-150';
 
   const variants = {
     default: 'bg-[var(--surface-elevated)] text-[var(--text-secondary)] border border-[var(--border)]',
-    accent: 'bg-[var(--accent)] text-white font-extrabold shadow-sm',
-    coral: 'bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/30',
-    cyan: 'bg-[var(--cyan)]/15 text-[var(--cyan)] border border-[var(--cyan)]/30',
-    violet: 'bg-[var(--violet)]/15 text-[var(--violet)] border border-[var(--violet)]/30',
-    community: 'bg-[var(--violet)]/15 text-[var(--violet)] border border-[var(--violet)]/30',
-    success: 'bg-[var(--success)]/15 text-[var(--success)] border border-[var(--success)]/30',
-    warning: 'bg-[var(--warning)]/15 text-[var(--warning)] border border-[var(--warning)]/30',
-    danger: 'bg-[var(--danger)]/15 text-[var(--danger)] border border-[var(--danger)]/30',
+    primary: 'bg-[#0095F6]/10 text-[#0095F6] border border-[#0095F6]/20',
+    accent: 'bg-[#0095F6] text-white',
+    success: 'bg-[#00BA88]/10 text-[#00BA88] border border-[#00BA88]/20',
+    warning: 'bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/20',
+    danger: 'bg-[#ED4956]/10 text-[#ED4956] border border-[#ED4956]/20',
     outline: 'bg-transparent text-[var(--text-secondary)] border border-[var(--border)]'
   };
 
   const sizes = {
-    sm: 'text-[9px] px-2 py-0.5 gap-1',
-    md: 'text-[10px] px-2.5 py-0.5 gap-1.5',
+    xs: 'text-[10px] px-1.5 py-0.5 gap-1',
+    sm: 'text-[11px] px-2 py-0.5 gap-1',
+    md: 'text-xs px-2.5 py-0.5 gap-1.5',
     lg: 'text-xs px-3 py-1 gap-2'
   };
 

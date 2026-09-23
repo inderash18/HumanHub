@@ -6,7 +6,9 @@ import {
   getUserFollowers, 
   getUserFollowing, 
   getSuggestedUsers, 
-  searchUsers 
+  searchUsers,
+  blockUser,
+  unblockUser
 } from '../controllers/userController.js';
 import { protect, optionalProtect } from '../middleware/auth.js';
 
@@ -19,6 +21,8 @@ router.get('/suggestions', protect, getSuggestedUsers);
 router.get('/search/query', searchUsers);
 
 router.post('/:id/follow', protect, followUser);
+router.post('/:id/block', protect, blockUser);
+router.post('/:id/unblock', protect, unblockUser);
 router.get('/:id/followers', getUserFollowers);
 router.get('/:id/following', getUserFollowing);
 

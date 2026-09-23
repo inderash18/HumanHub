@@ -7,15 +7,26 @@ import Like from '../models/Like.js';
 import SavedPost from '../models/SavedPost.js';
 import Notification from '../models/Notification.js';
 import Community from '../models/Community.js';
+import MediaAnalysis from '../models/MediaAnalysis.js';
+import Follow from '../models/Follow.js';
+import Block from '../models/Block.js';
+import { canViewPost, canDeletePost } from '../policies/authorization.js';
 
 // @desc    Create a new post
 // @route   POST /api/posts
 // @access  Private
 export const createPost = asyncHandler(async (req, res) => {
-  const { caption, body, communityId, mediaUrls, tags } = req.body;
+  const { caption, body, communityId, mediaUrls, mediaIds, tags } = req.body;
 
   const contentText = (caption || body || '').trim();
-  const mediaList = Array.isArray(mediaUrls) ? mediaUrls : (mediaUrls ? [mediaUrls] : []);
+  const rawMediaList = Array.isArray(mediaUrls) ? mediaUrls : (mediaUrls ? [mediaUrls] : []);
+
+  // Validate that media URLs are relative uploaded paths and not malicious remote URLs
+  const mediaList = rawMediaList.filter(url => {
+    if (typeof url !== 'string') return false;
+    const clean = url.trim();
+    return clean.startsWith('/api/uploads/') || clean.startsWith('/uploads/');
+  });
 
   if (!contentText && mediaList.length === 0) {
     res.status(400);
@@ -42,12 +53,30 @@ export const createPost = asyncHandler(async (req, res) => {
     mediaType = isVideo ? 'video' : 'image';
   }
 
+  // Find associated MediaAnalysis records if mediaIds or mediaUrls provided (ensuring uploader ownership)
+  let analysisDocIds = [];
+  if (Array.isArray(mediaIds) && mediaIds.length > 0) {
+    const validMediaIds = mediaIds.filter(id => typeof id === 'string' && /^[a-zA-Z0-9_\-\.]+$/.test(id));
+    const analysisDocs = await MediaAnalysis.find({
+      mediaId: { $in: validMediaIds },
+      $or: [{ uploader: req.user._id }, { uploader: null }]
+    });
+    analysisDocIds = analysisDocs.map(d => d._id);
+  } else if (mediaList.length > 0) {
+    const analysisDocs = await MediaAnalysis.find({
+      mediaUrl: { $in: mediaList },
+      $or: [{ uploader: req.user._id }, { uploader: null }]
+    });
+    analysisDocIds = analysisDocs.map(d => d._id);
+  }
+
   const post = await Post.create({
     caption: contentText,
     body: contentText,
     author: req.user._id,
     community: assignedCommunity,
     mediaUrls: mediaList,
+    mediaAnalysis: analysisDocIds,
     mediaType,
     tags: extractedTags,
     status: 'pending_review'
@@ -60,12 +89,21 @@ export const createPost = asyncHandler(async (req, res) => {
     await post.save();
   }
 
+  // Link Post ID back to MediaAnalysis documents
+  if (analysisDocIds.length > 0) {
+    await MediaAnalysis.updateMany(
+      { _id: { $in: analysisDocIds } },
+      { $set: { post: post._id, uploader: req.user._id } }
+    );
+  }
+
   // Increment user's post count
   await User.findByIdAndUpdate(req.user._id, { $inc: { postsCount: 1 } });
 
   const populatedPost = await Post.findById(post._id)
     .populate('author', 'username displayName avatar bio')
-    .populate('community', 'name slug icon');
+    .populate('community', 'name slug icon')
+    .populate('mediaAnalysis');
 
   res.status(201).json({
     success: true,
@@ -101,15 +139,48 @@ export const getPosts = asyncHandler(async (req, res) => {
     query.tags = req.query.tag.toLowerCase();
   }
 
-  const [posts, total] = await Promise.all([
+  // Handle blocking: exclude authors who blocked or are blocked by req.user
+  let followingSet = new Set();
+  if (req.user) {
+    const [blockedRecords, followingRecords] = await Promise.all([
+      Block.find({ $or: [{ blocker: req.user._id }, { blocked: req.user._id }] }),
+      Follow.find({ follower: req.user._id }).select('following')
+    ]);
+
+    const blockedIds = blockedRecords.map(b => 
+      b.blocker.toString() === req.user._id.toString() ? b.blocked : b.blocker
+    );
+
+    if (blockedIds.length > 0) {
+      query.author = { $nin: blockedIds };
+    }
+
+    followingRecords.forEach(f => followingSet.add(f.following.toString()));
+  }
+
+  const [rawPosts, total] = await Promise.all([
     Post.find(query)
-      .populate('author', 'username displayName avatar bio')
+      .populate('author', 'username displayName avatar bio privacySettings')
       .populate('community', 'name slug icon')
+      .populate('mediaAnalysis')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),
     Post.countDocuments(query)
   ]);
+
+  // Filter out private posts if viewer is not following author
+  const posts = rawPosts.filter(post => {
+    if (!post.author) return false;
+    const authorPrivacy = post.author.privacySettings || {};
+    if (authorPrivacy.isPrivate) {
+      const isAuthor = req.user && String(post.author._id) === String(req.user._id);
+      const isFollowing = req.user && followingSet.has(String(post.author._id));
+      const isPrivileged = req.user && ['admin', 'moderator'].includes(req.user.role);
+      return isAuthor || isFollowing || isPrivileged;
+    }
+    return true;
+  });
 
   // Check liked & saved status for logged-in user
   let likedPostIds = new Set();
@@ -150,13 +221,39 @@ export const getPosts = asyncHandler(async (req, res) => {
 // @route   GET /api/posts/:id
 // @access  Public (Optional Auth)
 export const getPostById = asyncHandler(async (req, res) => {
-  const post = await Post.findById(req.params.id)
-    .populate('author', 'username displayName avatar bio')
-    .populate('community', 'name slug icon description');
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    res.status(404);
+    throw new Error('Post not found');
+  }
 
-  if (!post || (post.status !== 'published' &&
-      String(post.author?._id) !== String(req.user?._id) &&
-      !['admin', 'moderator'].includes(req.user?.role))) {
+  const post = await Post.findById(req.params.id)
+    .populate('author', 'username displayName avatar bio privacySettings')
+    .populate('community', 'name slug icon description')
+    .populate('mediaAnalysis');
+
+  if (!post) {
+    res.status(404);
+    throw new Error('Post not found');
+  }
+
+  let isFollowing = false;
+  let isBlocked = false;
+
+  if (req.user && post.author) {
+    [isFollowing, isBlocked] = await Promise.all([
+      Follow.exists({ follower: req.user._id, following: post.author._id }),
+      Block.isBlocked(req.user._id, post.author._id)
+    ]);
+  }
+
+  const authorized = canViewPost({
+    user: req.user,
+    post,
+    isFollowing: Boolean(isFollowing),
+    isBlocked: Boolean(isBlocked)
+  });
+
+  if (!authorized) {
     res.status(404);
     throw new Error('Post not found');
   }
@@ -275,7 +372,8 @@ export const getSavedPosts = asyncHandler(async (req, res) => {
       path: 'post',
       populate: [
         { path: 'author', select: 'username displayName avatar bio' },
-        { path: 'community', select: 'name slug icon' }
+        { path: 'community', select: 'name slug icon' },
+        { path: 'mediaAnalysis' }
       ]
     })
     .sort({ createdAt: -1 });
@@ -311,6 +409,7 @@ export const deletePost = asyncHandler(async (req, res) => {
 
   await Promise.all([
     Post.deleteOne({ _id: post._id }),
+    MediaAnalysis.deleteMany({ post: post._id }),
     Like.deleteMany({ post: post._id }),
     SavedPost.deleteMany({ post: post._id }),
     Notification.deleteMany({ post: post._id }),
@@ -319,4 +418,3 @@ export const deletePost = asyncHandler(async (req, res) => {
 
   res.status(200).json({ success: true, message: 'Post deleted successfully' });
 });
-

@@ -9,6 +9,7 @@ import {
   EyeOff, 
   KeyRound, 
   RotateCw,
+  ShieldCheck,
   X
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -18,7 +19,7 @@ import api from '../services/api';
 export default function LandingPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { login, register: registerUser, isAuthenticated } = useAuthStore();
+  const { login, register: registerUser, verifyMfa, isAuthenticated } = useAuthStore();
 
   const [mode, setMode] = useState(searchParams.get('mode') === 'signup' ? 'signup' : 'signin');
 
@@ -27,6 +28,13 @@ export default function LandingPage() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
+
+  // MFA Modal State
+  const [mfaModalOpen, setMfaModalOpen] = useState(false);
+  const [mfaChallengeId, setMfaChallengeId] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [isBackupCode, setIsBackupCode] = useState(false);
+  const [mfaLoading, setMfaLoading] = useState(false);
 
   // Sign Up Form State
   const [regEmail, setRegEmail] = useState('');
@@ -80,7 +88,12 @@ export default function LandingPage() {
 
     try {
       setLoginLoading(true);
-      await login(loginIdentifier.trim(), loginPassword);
+      const res = await login(loginIdentifier.trim(), loginPassword);
+      if (res?.mfaRequired) {
+        setMfaChallengeId(res.challengeId);
+        setMfaModalOpen(true);
+        return;
+      }
       toast.success('Welcome back!');
       navigate('/feed');
     } catch (err) {
@@ -92,6 +105,26 @@ export default function LandingPage() {
       }
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  const handleVerifyMfa = async (e) => {
+    e.preventDefault();
+    if (!mfaCode.trim()) {
+      toast.error('Please enter your authentication code');
+      return;
+    }
+
+    try {
+      setMfaLoading(true);
+      await verifyMfa(mfaChallengeId, mfaCode.trim(), isBackupCode);
+      toast.success('Two-factor authentication verified!');
+      setMfaModalOpen(false);
+      navigate('/feed');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Invalid or expired authentication code');
+    } finally {
+      setMfaLoading(false);
     }
   };
 
@@ -408,6 +441,67 @@ export default function LandingPage() {
           <span>© {new Date().getFullYear()} HUMANHUB FROM ORGANIC SOCIAL</span>
         </div>
       </footer>
+
+      {/* ================= MFA 2FA MODAL ================= */}
+      {mfaModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-fade-in">
+          <div className="bg-[var(--ig-elevated)] border border-[var(--ig-border)] rounded-2xl p-6 sm:p-8 max-w-sm w-full shadow-2xl relative text-center">
+            <button
+              onClick={() => setMfaModalOpen(false)}
+              className="absolute top-4 right-4 text-[var(--ig-text-tertiary)] hover:text-[var(--ig-text-primary)]"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-16 h-16 rounded-full border-2 border-[var(--ig-text-primary)] flex items-center justify-center mx-auto mb-4 text-[var(--ig-text-primary)]">
+              <ShieldCheck className="w-8 h-8 stroke-[1.5]" />
+            </div>
+
+            <h3 className="text-base font-semibold text-[var(--ig-text-primary)] mb-1">
+              Two-Factor Authentication
+            </h3>
+            <p className="text-xs text-[var(--ig-text-secondary)] mb-6">
+              {isBackupCode 
+                ? 'Enter one of your 8-character single-use recovery codes.' 
+                : 'Enter the 6-digit verification code from your authenticator app.'}
+            </p>
+
+            <form onSubmit={handleVerifyMfa} className="space-y-4">
+              <input
+                type="text"
+                maxLength={isBackupCode ? 10 : 6}
+                placeholder={isBackupCode ? "Recovery Code" : "######"}
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                className="w-full text-center tracking-[6px] font-mono text-xl font-bold bg-[var(--ig-bg)] border border-[var(--ig-border)] text-[var(--ig-text-primary)] rounded-lg py-2.5 outline-none focus:border-[var(--ig-primary-button)]"
+                autoFocus
+                required
+              />
+
+              <button
+                type="submit"
+                disabled={mfaLoading || !mfaCode.trim()}
+                className="ig-btn-primary w-full !py-2 !rounded-lg"
+              >
+                {mfaLoading ? 'Verifying...' : 'Verify & Sign In'}
+              </button>
+            </form>
+
+            <div className="mt-4 pt-4 border-t border-[var(--ig-border)] text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBackupCode(!isBackupCode);
+                  setMfaCode('');
+                }}
+                className="font-semibold text-[var(--ig-primary-button)] hover:underline"
+              >
+                {isBackupCode ? 'Use Authenticator App Code' : 'Use a Backup / Recovery Code'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================= OTP VERIFICATION MODAL ================= */}
       {otpModalOpen && (

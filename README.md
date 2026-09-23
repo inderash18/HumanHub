@@ -267,14 +267,11 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 ### Key Production Controls:
 * **Isolated Networks**: Databases (MongoDB, Redis) and AI services are on internal networks (`db_net`, `ai_net`) without host port exposure.
 * **Least Privilege**: Dropped Linux capabilities (`cap_drop: - ALL`) and `no-new-privileges:true`.
-* **Security Headers**: Production Content-Security-Policy (CSP), `frame-ancestors: 'none'`, and HSTS.
-
-For detailed security documentation, refer to:
-* [`SECURITY.md`](SECURITY.md) — Security baseline and vulnerability reporting SLA.
-* [`THREAT_MODEL.md`](THREAT_MODEL.md) — STRIDE threat matrix and trust boundary analysis.
-* [`SECURITY_FINDINGS.md`](SECURITY_FINDINGS.md) — Complete vulnerability register and remediation log.
-* [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) — Production deployment and container hardening guide.
-* [`INCIDENT_RESPONSE.md`](INCIDENT_RESPONSE.md) — Incident handling playbooks and rollback procedures.
+For detailed architecture, deployment, and security documentation, refer to:
+* [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — System topology, authentication/session design, and media access policy.
+* [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — Production deployment, container hardening, backups, and operations.
+* [`docs/SECURITY.md`](docs/SECURITY.md) — Threat model, findings register, verified test logs, and incident playbooks.
+* [`SECURITY.md`](SECURITY.md) — Security baseline and vulnerability reporting instructions.
 
 ---
 

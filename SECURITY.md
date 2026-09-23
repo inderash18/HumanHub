@@ -23,8 +23,17 @@ If you discover a security vulnerability within HumanHub, please do NOT file a p
 
 ---
 
-## 3. Supported Versions
+## 3. Detailed Security Documentation
+For the full technical dossier, threat modeling, verified test results, and incident response playbooks, refer to:
+* [docs/SECURITY.md](docs/SECURITY.md) — Threat model, findings register, test logs, and incident playbooks.
+* [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Authentication architecture, session rotation, and media access policy.
+* [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — Production container hardening and secret management.
+
+---
+
+## 4. Supported Versions
 | Version | Supported |
 | :--- | :--- |
-| `security/hardening` (Current) | :white_check_mark: Active |
+| `maintenance/cleanup-and-docs` (Current) | :white_check_mark: Active |
+| `security/hardening` | :white_check_mark: Active |
 | `main` (Pre-Hardening) | :x: Deprecated |

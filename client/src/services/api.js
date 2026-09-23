@@ -8,6 +8,27 @@ const api = axios.create({
 });
 let refreshing;
 
+export function getRetryAfterSeconds(error, fallback = 15) {
+  if (!error || !error.response) return fallback;
+  const retryHeader = error.response.headers?.['retry-after'];
+  if (retryHeader) {
+    const parsedInt = parseInt(retryHeader, 10);
+    if (!isNaN(parsedInt) && parsedInt > 0) {
+      return Math.min(parsedInt, 300);
+    }
+    const parsedDate = Date.parse(retryHeader);
+    if (!isNaN(parsedDate)) {
+      const diffSecs = Math.ceil((parsedDate - Date.now()) / 1000);
+      if (diffSecs > 0) return Math.min(diffSecs, 300);
+    }
+  }
+  const bodyRetry = error.response.data?.retryAfter;
+  if (typeof bodyRetry === 'number' && bodyRetry > 0) {
+    return Math.min(bodyRetry, 300);
+  }
+  return fallback;
+}
+
 export function refreshAccessToken() {
   if (!refreshing) {
     const run = async () => {

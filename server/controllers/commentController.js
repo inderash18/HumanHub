@@ -27,9 +27,8 @@ export const createComment = asyncHandler(async (req, res) => {
     post: postId
   });
 
-  // Increment comments count on post
-  post.commentsCount = (post.commentsCount || 0) + 1;
-  await post.save();
+  // Atomic increment of comments count on post
+  await Post.findByIdAndUpdate(postId, { $inc: { commentsCount: 1 } });
 
   // Send notification to post author if not self
   if (post.author.toString() !== req.user._id.toString()) {

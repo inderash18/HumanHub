@@ -293,37 +293,66 @@ export const toggleLikePost = asyncHandler(async (req, res) => {
     throw new Error('Post not found');
   }
 
-  const existingLike = await Like.findOne({ user: req.user._id, post: postId });
-  let hasLiked = false;
+  const { action } = req.body || {};
+  let hasLiked;
 
-  if (existingLike) {
-    await Like.deleteOne({ _id: existingLike._id });
-    post.likesCount = Math.max(0, (post.likesCount || 0) - 1);
+  if (action === 'like') {
+    try {
+      await Like.create({ user: req.user._id, post: postId });
+      await Post.findByIdAndUpdate(postId, { $inc: { likesCount: 1 } });
+      hasLiked = true;
+      if (post.author.toString() !== req.user._id.toString()) {
+        await Notification.create({
+          recipient: post.author,
+          sender: req.user._id,
+          type: 'like',
+          post: post._id,
+          text: 'liked your post.'
+        }).catch(() => {});
+      }
+    } catch {
+      hasLiked = true;
+    }
+  } else if (action === 'unlike') {
+    const deleted = await Like.findOneAndDelete({ user: req.user._id, post: postId });
+    if (deleted) {
+      await Post.findByIdAndUpdate(postId, { $inc: { likesCount: -1 } });
+    }
     hasLiked = false;
   } else {
-    await Like.create({ user: req.user._id, post: postId });
-    post.likesCount = (post.likesCount || 0) + 1;
-    hasLiked = true;
-
-    // Trigger notification to author if someone else liked
-    if (post.author.toString() !== req.user._id.toString()) {
-      await Notification.create({
-        recipient: post.author,
-        sender: req.user._id,
-        type: 'like',
-        post: post._id,
-        text: 'liked your post.'
-      });
+    const existingLike = await Like.findOne({ user: req.user._id, post: postId });
+    if (existingLike) {
+      await Like.deleteOne({ _id: existingLike._id });
+      await Post.findByIdAndUpdate(postId, { $inc: { likesCount: -1 } });
+      hasLiked = false;
+    } else {
+      try {
+        await Like.create({ user: req.user._id, post: postId });
+        await Post.findByIdAndUpdate(postId, { $inc: { likesCount: 1 } });
+        hasLiked = true;
+        if (post.author.toString() !== req.user._id.toString()) {
+          await Notification.create({
+            recipient: post.author,
+            sender: req.user._id,
+            type: 'like',
+            post: post._id,
+            text: 'liked your post.'
+          }).catch(() => {});
+        }
+      } catch {
+        hasLiked = true;
+      }
     }
   }
 
-  await post.save();
+  const updatedPost = await Post.findById(postId).select('likesCount');
+  const currentCount = Math.max(0, updatedPost?.likesCount || 0);
 
   res.status(200).json({
     success: true,
     hasLiked,
     isLiked: hasLiked,
-    likesCount: post.likesCount,
+    likesCount: currentCount,
     message: hasLiked ? 'Post liked' : 'Post unliked'
   });
 });
@@ -340,25 +369,47 @@ export const toggleSavePost = asyncHandler(async (req, res) => {
     throw new Error('Post not found');
   }
 
-  const existingSave = await SavedPost.findOne({ user: req.user._id, post: postId });
-  let isSaved = false;
+  const { action } = req.body || {};
+  let isSaved;
 
-  if (existingSave) {
-    await SavedPost.deleteOne({ _id: existingSave._id });
-    post.savesCount = Math.max(0, (post.savesCount || 0) - 1);
+  if (action === 'save') {
+    try {
+      await SavedPost.create({ user: req.user._id, post: postId });
+      await Post.findByIdAndUpdate(postId, { $inc: { savesCount: 1 } });
+      isSaved = true;
+    } catch {
+      isSaved = true;
+    }
+  } else if (action === 'unsave') {
+    const deleted = await SavedPost.findOneAndDelete({ user: req.user._id, post: postId });
+    if (deleted) {
+      await Post.findByIdAndUpdate(postId, { $inc: { savesCount: -1 } });
+    }
     isSaved = false;
   } else {
-    await SavedPost.create({ user: req.user._id, post: postId });
-    post.savesCount = (post.savesCount || 0) + 1;
-    isSaved = true;
+    const existingSave = await SavedPost.findOne({ user: req.user._id, post: postId });
+    if (existingSave) {
+      await SavedPost.deleteOne({ _id: existingSave._id });
+      await Post.findByIdAndUpdate(postId, { $inc: { savesCount: -1 } });
+      isSaved = false;
+    } else {
+      try {
+        await SavedPost.create({ user: req.user._id, post: postId });
+        await Post.findByIdAndUpdate(postId, { $inc: { savesCount: 1 } });
+        isSaved = true;
+      } catch {
+        isSaved = true;
+      }
+    }
   }
 
-  await post.save();
+  const updatedPost = await Post.findById(postId).select('savesCount');
+  const currentSaves = Math.max(0, updatedPost?.savesCount || 0);
 
   res.status(200).json({
     success: true,
     isSaved,
-    savesCount: post.savesCount,
+    savesCount: currentSaves,
     message: isSaved ? 'Post saved to your bookmarks' : 'Post removed from your bookmarks'
   });
 });

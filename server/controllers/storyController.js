@@ -19,7 +19,7 @@ export const createStory = asyncHandler(async (req, res) => {
   });
 
   // Populate author info before returning
-  await story.populate('author', 'username avatar trustScore');
+  await story.populate('author', 'username displayName avatar trustScore');
 
   res.status(201).json({
     message: 'Story created successfully',
@@ -29,15 +29,15 @@ export const createStory = asyncHandler(async (req, res) => {
 
 // @desc    Get all active stories (from past 24 hours)
 // @route   GET /api/stories
-// @access  Private
+// @access  Public / Optional Auth
 export const getStories = asyncHandler(async (req, res) => {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const stories = await Story.find({
     createdAt: { $gte: yesterday }
   })
-  .populate('author', 'username avatar trustScore')
+  .populate('author', 'username displayName avatar trustScore')
   .sort({ createdAt: -1 });
 
-  res.json(stories);
+  res.json(stories || []);
 });

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/useAuthStore';
-import api from '../services/api';
+import api, { getRetryAfterSeconds } from '../services/api';
 import UserAvatar from '../components/common/UserAvatar';
 import EmptyState from '../components/common/EmptyState';
 import ImageOriginBadge from '../components/media/ImageOriginBadge';
@@ -30,10 +30,17 @@ export default function PostDetailPage() {
   const [loading, setLoading] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
+  const [isLiking, setIsLiking] = useState(false);
+  const [likeCooldownUntil, setLikeCooldownUntil] = useState(0);
+
   const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveCooldownUntil, setSaveCooldownUntil] = useState(0);
+
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState([]);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
 
   // Origin Analysis Modal
@@ -81,60 +88,111 @@ export default function PostDetailPage() {
   };
 
   const fetchComments = async () => {
+    if (isLoadingComments) return;
     try {
+      setIsLoadingComments(true);
       const res = await api.get(`/comments/${id}`);
       setComments(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       setComments([]);
+    } finally {
+      setIsLoadingComments(false);
     }
   };
 
   const handleLike = async () => {
     if (!isAuthenticated) return navigate('/login');
+
+    if (Date.now() < likeCooldownUntil) {
+      const waitSecs = Math.ceil((likeCooldownUntil - Date.now()) / 1000);
+      toast.error(`Please wait ${waitSecs}s before trying again.`);
+      return;
+    }
+
+    if (isLiking) return;
+
     const nextLiked = !isLiked;
     setIsLiked(nextLiked);
     setLikesCount((prev) => nextLiked ? prev + 1 : Math.max(0, prev - 1));
+    setIsLiking(true);
 
     try {
-      const res = await api.post(`/posts/${id}/like`);
+      const res = await api.post(`/posts/${id}/like`, { action: nextLiked ? 'like' : 'unlike' });
       if (res.data && typeof res.data.likesCount === 'number') {
         setLikesCount(res.data.likesCount);
-        setIsLiked(res.data.hasLiked);
+        setIsLiked(Boolean(res.data.hasLiked ?? res.data.isLiked));
       }
     } catch (err) {
       setIsLiked(!nextLiked);
       setLikesCount((prev) => !nextLiked ? prev + 1 : Math.max(0, prev - 1));
+
+      if (err.response?.status === 429) {
+        const retrySecs = getRetryAfterSeconds(err, 10);
+        setLikeCooldownUntil(Date.now() + retrySecs * 1000);
+        toast.error(`You're doing that too fast. Please wait ${retrySecs}s.`);
+      } else if (err.response?.status !== 401) {
+        toast.error(err.response?.data?.message || 'Failed to update like');
+      }
+    } finally {
+      setIsLiking(false);
     }
   };
 
   const handleSave = async () => {
     if (!isAuthenticated) return navigate('/login');
+
+    if (Date.now() < saveCooldownUntil) {
+      const waitSecs = Math.ceil((saveCooldownUntil - Date.now()) / 1000);
+      toast.error(`Please wait ${waitSecs}s before trying again.`);
+      return;
+    }
+
+    if (isSaving) return;
+
     const nextSaved = !isSaved;
     setIsSaved(nextSaved);
+    setIsSaving(true);
+
     try {
-      const res = await api.post(`/posts/${id}/save`);
+      const res = await api.post(`/posts/${id}/save`, { action: nextSaved ? 'save' : 'unsave' });
       if (res.data && typeof res.data.isSaved === 'boolean') {
         setIsSaved(res.data.isSaved);
       }
     } catch (err) {
       setIsSaved(!nextSaved);
+
+      if (err.response?.status === 429) {
+        const retrySecs = getRetryAfterSeconds(err, 10);
+        setSaveCooldownUntil(Date.now() + retrySecs * 1000);
+        toast.error(`You're doing that too fast. Please wait ${retrySecs}s.`);
+      } else if (err.response?.status !== 401) {
+        toast.error(err.response?.data?.message || 'Failed to update saved post');
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
-    if (!commentText.trim() || !isAuthenticated) return;
+    const textToSubmit = commentText.trim();
+    if (!textToSubmit || !isAuthenticated || isSubmittingComment) return;
 
     try {
       setIsSubmittingComment(true);
       const res = await api.post('/comments', {
         postId: id,
-        text: commentText.trim()
+        text: textToSubmit
       });
       setComments((prev) => [...prev, res.data]);
       setCommentText('');
     } catch (err) {
-      toast.error('Failed to post comment');
+      if (err.response?.status === 429) {
+        const retrySecs = getRetryAfterSeconds(err, 10);
+        toast.error(`Too many comments submitted. Please wait ${retrySecs}s.`);
+      } else {
+        toast.error(err.response?.data?.message || 'Failed to post comment');
+      }
     } finally {
       setIsSubmittingComment(false);
     }

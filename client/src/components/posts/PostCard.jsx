@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/useAuthStore';
-import api from '../../services/api';
+import api, { getRetryAfterSeconds } from '../../services/api';
 import UserAvatar from '../common/UserAvatar';
 import ImageOriginBadge from '../media/ImageOriginBadge';
 import ImageOriginEvidenceModal from '../media/ImageOriginEvidenceModal';
@@ -28,7 +28,13 @@ export default function PostCard({ post, onUpdate }) {
 
   const [isLiked, setIsLiked] = useState(Boolean(post.isLiked ?? post.hasLiked));
   const [likesCount, setLikesCount] = useState(post.likesCount || 0);
+  const [isLiking, setIsLiking] = useState(false);
+  const [likeCooldownUntil, setLikeCooldownUntil] = useState(0);
+
   const [isSaved, setIsSaved] = useState(Boolean(post.isSaved));
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveCooldownUntil, setSaveCooldownUntil] = useState(0);
+
   const [showHeartAnim, setShowHeartAnim] = useState(false);
   
   const [commentText, setCommentText] = useState('');
@@ -37,6 +43,7 @@ export default function PostCard({ post, onUpdate }) {
   const [commentsCount, setCommentsCount] = useState(post.commentsCount || (post.comments?.length || 0));
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const [loadedComments, setLoadedComments] = useState(false);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
 
   const [isExpandedCaption, setIsExpandedCaption] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
@@ -121,19 +128,39 @@ export default function PostCard({ post, onUpdate }) {
       return navigate('/login');
     }
 
+    if (Date.now() < likeCooldownUntil) {
+      const waitSecs = Math.ceil((likeCooldownUntil - Date.now()) / 1000);
+      toast.error(`Please wait ${waitSecs}s before trying again.`);
+      return;
+    }
+
+    if (isLiking) return;
+
     const nextLiked = !isLiked;
     setIsLiked(nextLiked);
     setLikesCount((prev) => nextLiked ? prev + 1 : Math.max(0, prev - 1));
+    setIsLiking(true);
 
     try {
-      const res = await api.post(`/posts/${post._id}/like`);
+      const res = await api.post(`/posts/${post._id}/like`, { action: nextLiked ? 'like' : 'unlike' });
       if (res.data && typeof res.data.likesCount === 'number') {
         setLikesCount(res.data.likesCount);
-        setIsLiked(res.data.hasLiked);
+        setIsLiked(Boolean(res.data.hasLiked ?? res.data.isLiked));
       }
     } catch (err) {
+      // Revert optimistic UI
       setIsLiked(!nextLiked);
       setLikesCount((prev) => !nextLiked ? prev + 1 : Math.max(0, prev - 1));
+
+      if (err.response?.status === 429) {
+        const retrySecs = getRetryAfterSeconds(err, 10);
+        setLikeCooldownUntil(Date.now() + retrySecs * 1000);
+        toast.error(`You're doing that too fast. Please wait ${retrySecs}s.`);
+      } else if (err.response?.status !== 401) {
+        toast.error(err.response?.data?.message || 'Failed to update like');
+      }
+    } finally {
+      setIsLiking(false);
     }
   };
 
@@ -148,26 +175,53 @@ export default function PostCard({ post, onUpdate }) {
       toast.error('Please log in to save posts');
       return navigate('/login');
     }
+
+    if (Date.now() < saveCooldownUntil) {
+      const waitSecs = Math.ceil((saveCooldownUntil - Date.now()) / 1000);
+      toast.error(`Please wait ${waitSecs}s before trying again.`);
+      return;
+    }
+
+    if (isSaving) return;
+
     const nextSaved = !isSaved;
     setIsSaved(nextSaved);
+    setIsSaving(true);
 
     try {
-      const res = await api.post(`/posts/${post._id}/save`);
+      const res = await api.post(`/posts/${post._id}/save`, { action: nextSaved ? 'save' : 'unsave' });
       if (res.data && typeof res.data.isSaved === 'boolean') {
         setIsSaved(res.data.isSaved);
       }
     } catch (err) {
       setIsSaved(!nextSaved);
+
+      if (err.response?.status === 429) {
+        const retrySecs = getRetryAfterSeconds(err, 10);
+        setSaveCooldownUntil(Date.now() + retrySecs * 1000);
+        toast.error(`You're doing that too fast. Please wait ${retrySecs}s.`);
+      } else if (err.response?.status !== 401) {
+        toast.error(err.response?.data?.message || 'Failed to update saved post');
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const fetchComments = async () => {
-    if (!loadedComments) {
-      try {
-        const res = await api.get(`/comments/${post._id}`);
-        setComments(Array.isArray(res.data) ? res.data : []);
-        setLoadedComments(true);
-      } catch (err) {}
+    if (loadedComments || isLoadingComments) return;
+    try {
+      setIsLoadingComments(true);
+      const res = await api.get(`/comments/${post._id}`);
+      setComments(Array.isArray(res.data) ? res.data : []);
+      setLoadedComments(true);
+    } catch (err) {
+      if (err.response?.status === 429) {
+        const retrySecs = getRetryAfterSeconds(err, 10);
+        toast.error(`Comments temporarily busy. Please wait ${retrySecs}s.`);
+      }
+    } finally {
+      setIsLoadingComments(false);
     }
   };
 
@@ -179,20 +233,26 @@ export default function PostCard({ post, onUpdate }) {
 
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
-    if (!commentText.trim() || !isAuthenticated) return;
+    const textToSubmit = commentText.trim();
+    if (!textToSubmit || !isAuthenticated || isSubmittingComment) return;
 
     try {
       setIsSubmittingComment(true);
       const res = await api.post('/comments', {
         postId: post._id,
-        text: commentText.trim()
+        text: textToSubmit
       });
 
       setComments((prev) => [...prev, res.data]);
       setCommentsCount((prev) => prev + 1);
       setCommentText('');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to post comment');
+      if (err.response?.status === 429) {
+        const retrySecs = getRetryAfterSeconds(err, 10);
+        toast.error(`Too many comments submitted. Please wait ${retrySecs}s.`);
+      } else {
+        toast.error(err.response?.data?.message || 'Failed to post comment');
+      }
     } finally {
       setIsSubmittingComment(false);
     }

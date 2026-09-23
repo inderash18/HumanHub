@@ -18,6 +18,7 @@ import notificationRoutes from './routes/notifications.js';
 import uploadRoutes from './routes/upload.js';
 import moderationRoutes from './routes/moderation.js';
 import mediaAnalysisRoutes from './routes/mediaAnalysis.js';
+import storyRoutes from './routes/stories.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,6 +65,7 @@ app.use('/api/posts/upload', uploadRoutes);
 // Mount API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
+app.use('/api/stories', storyRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/communities', communityRoutes);
 app.use('/api/users', userRoutes);

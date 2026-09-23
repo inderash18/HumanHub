@@ -26,6 +26,10 @@ const postSchema = new mongoose.Schema({
   mediaUrls: [{
     type: String
   }],
+  mediaAnalysis: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'MediaAnalysis'
+  }],
   mediaType: {
     type: String,
     enum: ['text', 'image', 'video', 'mixed'],
@@ -64,4 +68,3 @@ postSchema.index({ status: 1, createdAt: -1 });
 postSchema.index({ tags: 1 });
 
 export default mongoose.model('Post', postSchema);
-

@@ -67,7 +67,7 @@ export default function CommunityPage() {
           isJoined: nextJoined
         });
       }
-      toast.success(nextJoined ? `Joined c/${slug} ✨` : `Left c/${slug}`);
+      toast.success(nextJoined ? `Joined c/${slug}` : `Left c/${slug}`);
     } catch (err) {
       toast.error('Failed to update membership');
     }
@@ -75,8 +75,8 @@ export default function CommunityPage() {
 
   if (loading) {
     return (
-      <div className="w-full max-w-4xl mx-auto px-4 py-20 flex flex-col items-center justify-center select-none">
-        <Users className="w-10 h-10 text-[var(--text-tertiary)] animate-pulse mb-3" />
+      <div className="w-full max-w-lg mx-auto px-4 py-20 flex flex-col items-center justify-center select-none">
+        <Users className="w-8 h-8 text-[var(--text-tertiary)] animate-pulse mb-3" />
         <p className="text-xs text-[var(--text-tertiary)]">Loading community...</p>
       </div>
     );
@@ -84,7 +84,7 @@ export default function CommunityPage() {
 
   if (!community) {
     return (
-      <div className="w-full max-w-md mx-auto px-4 py-24 select-none">
+      <div className="w-full max-w-md mx-auto px-4 py-20 select-none">
         <EmptyState
           icon={Users}
           title="Community Not Found"
@@ -97,7 +97,7 @@ export default function CommunityPage() {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 select-none space-y-6">
+    <div className="w-full max-w-xl mx-auto px-4 py-6 select-none space-y-6">
       {/* Back link */}
       <button
         onClick={() => navigate('/communities')}
@@ -107,22 +107,22 @@ export default function CommunityPage() {
         All Communities
       </button>
 
-      {/* Community Banner & Header Card */}
-      <div className="p-6 sm:p-8 rounded-3xl bg-[var(--surface)] border border-[var(--border)] shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--violet)] flex items-center justify-center font-display font-extrabold text-2xl shadow-sm">
+      {/* Community Header */}
+      <div className="p-4 sm:p-5 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-full bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-primary)] flex items-center justify-center font-bold text-lg">
             {community.name.slice(0, 2).toUpperCase()}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-display text-xl sm:text-2xl font-bold text-[var(--text-primary)] tracking-tight">
+              <h1 className="text-base sm:text-lg font-bold text-[var(--text-primary)]">
                 {community.name}
               </h1>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--surface-elevated)] text-[var(--violet)] border border-[var(--border)]">
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[var(--surface-elevated)] text-[var(--text-secondary)] border border-[var(--border)]">
                 c/{community.slug}
               </span>
             </div>
-            <p className="text-xs text-[var(--text-secondary)] max-w-lg mt-1 leading-relaxed">
+            <p className="text-xs text-[var(--text-secondary)] max-w-md mt-0.5 leading-relaxed">
               {community.description || 'Welcome to this community.'}
             </p>
             <p className="text-[11px] text-[var(--text-tertiary)] mt-1">
@@ -131,24 +131,24 @@ export default function CommunityPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto justify-end">
           <Button
             variant={isJoined ? 'secondary' : 'primary'}
             size="sm"
             onClick={handleJoinToggle}
-            icon={isJoined ? Check : Users}
+            icon={isJoined ? Check : undefined}
           >
-            {isJoined ? 'Joined' : 'Join Community'}
+            {isJoined ? 'Joined' : 'Join'}
           </Button>
 
           {isAuthenticated && (
             <Button
-              variant="primary"
+              variant="outline"
               size="sm"
               onClick={() => setIsCreateOpen(true)}
               icon={Plus}
             >
-              Post to c/{community.slug}
+              Post
             </Button>
           )}
         </div>
@@ -168,7 +168,7 @@ export default function CommunityPage() {
           <EmptyState
             icon={Users}
             title="No posts in this community yet"
-            description="Be the first to start a conversation in this space!"
+            description="Be the first to share a post in this space!"
             actionLabel={isAuthenticated ? "Create Post" : undefined}
             onAction={() => setIsCreateOpen(true)}
           />

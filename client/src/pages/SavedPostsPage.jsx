@@ -28,11 +28,11 @@ export default function SavedPostsPage() {
   };
 
   return (
-    <div className="w-full max-w-xl mx-auto px-4 sm:px-6 py-8 select-none space-y-6">
+    <div className="w-full max-w-[470px] mx-auto px-4 py-8 select-none space-y-6">
       <div className="flex items-center gap-2 pb-3 border-b border-[var(--border)]">
-        <Bookmark className="w-5 h-5 text-[var(--accent)]" />
-        <h1 className="font-display text-xl sm:text-2xl font-bold text-[var(--text-primary)]">
-          Saved Moments
+        <Bookmark className="w-5 h-5 text-[var(--text-primary)]" />
+        <h1 className="text-lg font-bold text-[var(--text-primary)]">
+          Saved Posts
         </h1>
       </div>
 
@@ -53,8 +53,8 @@ export default function SavedPostsPage() {
         ) : (
           <EmptyState 
             icon={Bookmark}
-            title="No Saved Moments"
-            description="Bookmark moments from your feed to easily revisit them here anytime."
+            title="Save Posts"
+            description="Save photos and videos that you want to see again. No one is notified, and only you can see what you've saved."
             actionLabel="Explore Feed"
             onAction={() => navigate('/feed')}
           />

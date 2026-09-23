@@ -15,16 +15,16 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-hub-background text-hub-text-primary flex transition-colors duration-200">
-      {/* Sleek Minimal Left Sidebar */}
+    <div className="min-h-screen bg-[var(--ig-bg)] text-[var(--ig-text-primary)] flex">
+      {/* Desktop Fixed Left Sidebar & Drawers */}
       <Sidebar />
 
-      {/* Main Content Area */}
-      <main className="flex-1 min-h-screen pl-0 md:pl-[72px] xl:pl-[240px] pb-16 md:pb-0 overflow-x-hidden">
+      {/* Main Responsive Content Area */}
+      <main className="flex-1 min-h-screen pl-0 md:pl-[72px] xl:pl-[244px] pt-12 md:pt-0 pb-[50px] md:pb-0 overflow-x-hidden">
         <Outlet />
       </main>
 
-      {/* Mobile Bottom Navigation */}
+      {/* Mobile Top Header and Bottom Navigation */}
       <MobileBottomNav />
     </div>
   );

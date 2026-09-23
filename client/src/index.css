@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 @import "tailwindcss/base";
 @import "tailwindcss/components";
@@ -7,157 +7,251 @@
 :root {
   color-scheme: dark;
 
-  /* HumanHub Design System — True Black & Deep Slate Dark-First Palette */
-  --background: #000000;
-  --surface: #0A0F1D;
-  --surface-elevated: #10182B;
-  --surface-muted: #17233B;
+  /* Instagram Dark Theme Reference */
+  --ig-bg: #000000;
+  --ig-surface: #000000;
+  --ig-elevated: #121212;
+  --ig-highlight: #1A1A1A;
+  --ig-hover: #121212;
+  
+  --ig-border: #262626;
+  --ig-border-subtle: #1C1C1C;
+  --ig-border-hover: #363636;
 
-  --border: #1E293B;
-  --border-subtle: #131D2E;
+  --ig-text-primary: #F5F5F5;
+  --ig-text-secondary: #A8A8A8;
+  --ig-text-tertiary: #737373;
+  --ig-text-link: #E0F1FF;
 
-  --text-primary: #FFFFFF;
-  --text-secondary: #94A3B8;
-  --text-tertiary: #64748B;
+  --ig-primary-button: #0095F6;
+  --ig-primary-button-hover: #1877F2;
+  --ig-primary-button-disabled: rgba(0, 149, 246, 0.3);
 
-  --accent: #F06E5C;
-  --accent-hover: #E05947;
+  --ig-secondary-button: #262626;
+  --ig-secondary-button-hover: #363636;
 
-  --cyan: #2EC4D6;
-  --violet: #8B7CF6;
+  --ig-like: #FF3040;
+  --ig-story-gradient: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  --ig-story-viewed: #363636;
 
-  --success: #3BC78A;
-  --warning: #F0B44D;
-  --danger: #EF5B5B;
-  --focus-ring: #F06E5C;
-
-  /* Aliases for semantic mapping */
-  --hub-bg: var(--background);
-  --hub-surface: var(--surface);
-  --hub-card: var(--surface);
-  --hub-card-hover: var(--surface-elevated);
-  --hub-border: var(--border);
-  --hub-border-light: var(--border-subtle);
-  --hub-accent: var(--accent);
-  --hub-accent-hover: var(--accent-hover);
-  --hub-cyan: var(--cyan);
-  --hub-violet: var(--violet);
-  --hub-success: var(--success);
-  --hub-warning: var(--warning);
-  --hub-danger: var(--danger);
-  --hub-text-primary: var(--text-primary);
-  --hub-text-secondary: var(--text-secondary);
-  --hub-text-tertiary: var(--text-tertiary);
-  --hub-text-muted: var(--text-tertiary);
+  /* Semantic Aliases */
+  --background: var(--ig-bg);
+  --surface: var(--ig-surface);
+  --surface-elevated: var(--ig-elevated);
+  --border: var(--ig-border);
+  --border-subtle: var(--ig-border-subtle);
+  --text-primary: var(--ig-text-primary);
+  --text-secondary: var(--ig-text-secondary);
+  --text-tertiary: var(--ig-text-tertiary);
+  --accent: var(--ig-primary-button);
+  --accent-hover: var(--ig-primary-button-hover);
 }
 
 .light {
   color-scheme: light;
 
-  /* HumanHub Clean Light Mode Fallback */
-  --background: #F8FAFC;
-  --surface: #FFFFFF;
-  --surface-elevated: #F1F5F9;
-  --surface-muted: #E2E8F0;
+  /* Instagram Light Theme Reference */
+  --ig-bg: #FFFFFF;
+  --ig-surface: #FFFFFF;
+  --ig-elevated: #FAFAFA;
+  --ig-highlight: #F5F5F5;
+  --ig-hover: #FAFAFA;
 
-  --border: #E2E8F0;
-  --border-subtle: #F1F5F9;
+  --ig-border: #DBDBDB;
+  --ig-border-subtle: #EFEFEF;
+  --ig-border-hover: #C7C7C7;
 
-  --text-primary: #0F172A;
-  --text-secondary: #475569;
-  --text-tertiary: #94A3B8;
+  --ig-text-primary: #000000;
+  --ig-text-secondary: #737373;
+  --ig-text-tertiary: #8E8E8E;
+  --ig-text-link: #00376B;
 
-  --accent: #F06E5C;
-  --accent-hover: #DB5848;
+  --ig-primary-button: #0095F6;
+  --ig-primary-button-hover: #1877F2;
+  --ig-primary-button-disabled: rgba(0, 149, 246, 0.3);
 
-  --cyan: #0EA5E9;
-  --violet: #7C3AED;
+  --ig-secondary-button: #EFEFEF;
+  --ig-secondary-button-hover: #DBDBDB;
 
-  --success: #16A34A;
-  --warning: #D97706;
-  --danger: #DC2626;
-  --focus-ring: #F06E5C;
+  --ig-like: #ED4956;
+  --ig-story-gradient: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  --ig-story-viewed: #DBDBDB;
 
-  --hub-bg: var(--background);
-  --hub-surface: var(--surface);
-  --hub-card: var(--surface);
-  --hub-card-hover: var(--surface-elevated);
-  --hub-border: var(--border);
-  --hub-border-light: var(--border-subtle);
-  --hub-accent: var(--accent);
-  --hub-accent-hover: var(--accent-hover);
-  --hub-cyan: var(--cyan);
-  --hub-violet: var(--violet);
-  --hub-success: var(--success);
-  --hub-warning: var(--warning);
-  --hub-danger: var(--danger);
-  --hub-text-primary: var(--text-primary);
-  --hub-text-secondary: var(--text-secondary);
-  --hub-text-tertiary: var(--text-tertiary);
-  --hub-text-muted: var(--text-tertiary);
+  --background: var(--ig-bg);
+  --surface: var(--ig-surface);
+  --surface-elevated: var(--ig-elevated);
+  --border: var(--ig-border);
+  --border-subtle: var(--ig-border-subtle);
+  --text-primary: var(--ig-text-primary);
+  --text-secondary: var(--ig-text-secondary);
+  --text-tertiary: var(--ig-text-tertiary);
+  --accent: var(--ig-primary-button);
+  --accent-hover: var(--ig-primary-button-hover);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background-color: var(--background);
-  color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--ig-bg);
+  color: var(--ig-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   margin: 0;
   padding: 0;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-/* Custom Scrollbars */
+/* Instagram Logo Font */
+.font-logo {
+  font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+/* Hide scrollbars while allowing smooth scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom Minimalist Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--background);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--surface-muted);
+  background: var(--ig-border);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--border);
+  background: var(--ig-text-tertiary);
 }
 
-/* Subtle utility animations */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+/* Story Gradient Ring */
+.ig-story-ring {
+  background: var(--ig-story-gradient);
+  padding: 2px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-@keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
+.ig-story-ring-viewed {
+  background: var(--ig-story-viewed);
+  padding: 2px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.animate-fade-in {
-  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.ig-story-inner {
+  background-color: var(--ig-bg);
+  padding: 2px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.animate-scale-in {
-  animation: scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+/* Instagram Buttons */
+.ig-btn-primary {
+  background-color: var(--ig-primary-button);
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 7px 16px;
+  transition: background-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
 }
 
-/* Glass Panels */
-.glass-panel {
-  background: rgba(17, 28, 46, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border);
+.ig-btn-primary:hover:not(:disabled) {
+  background-color: var(--ig-primary-button-hover);
 }
 
-.light .glass-panel {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border);
+.ig-btn-primary:disabled {
+  background-color: var(--ig-primary-button-disabled);
+  cursor: default;
+}
+
+.ig-btn-secondary {
+  background-color: var(--ig-secondary-button);
+  color: var(--ig-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 7px 16px;
+  transition: background-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.ig-btn-secondary:hover {
+  background-color: var(--ig-secondary-button-hover);
+}
+
+/* Instagram Post Actions */
+.ig-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--ig-text-primary);
+  padding: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.ig-icon-btn:hover {
+  opacity: 0.7;
+}
+
+.ig-icon-btn:active {
+  transform: scale(0.92);
+}
+
+/* Double Tap Heart Pop */
+@keyframes igHeartPop {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); opacity: 0.95; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+.animate-heart-pop {
+  animation: igHeartPop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* Reels scroll snap */
+.reels-container {
+  scroll-snap-type: y mandatory;
+  overflow-y: scroll;
+  height: 100vh;
+}
+
+.reel-item {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  height: 100vh;
 }

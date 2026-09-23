@@ -8,61 +8,40 @@ export default {
   theme: {
     extend: {
       colors: {
+        ig: {
+          bg: 'var(--ig-bg)',
+          surface: 'var(--ig-surface)',
+          elevated: 'var(--ig-elevated)',
+          highlight: 'var(--ig-highlight)',
+          hover: 'var(--ig-hover)',
+          border: 'var(--ig-border)',
+          'border-subtle': 'var(--ig-border-subtle)',
+          'border-hover': 'var(--ig-border-hover)',
+          primary: 'var(--ig-text-primary)',
+          secondary: 'var(--ig-text-secondary)',
+          tertiary: 'var(--ig-text-tertiary)',
+          link: 'var(--ig-text-link)',
+          blue: 'var(--ig-primary-button)',
+          'blue-hover': 'var(--ig-primary-button-hover)',
+          like: 'var(--ig-like)',
+        },
         hub: {
-          background: 'var(--background)',
-          surface: 'var(--surface)',
-          'surface-elevated': 'var(--surface-elevated)',
-          'surface-muted': 'var(--surface-muted)',
-          
-          border: 'var(--border)',
-          'border-subtle': 'var(--border-subtle)',
-          
-          'text-primary': 'var(--text-primary)',
-          'text-secondary': 'var(--text-secondary)',
-          'text-tertiary': 'var(--text-tertiary)',
-          
-          accent: 'var(--accent)',
-          'accent-hover': 'var(--accent-hover)',
-          
-          cyan: 'var(--cyan)',
-          violet: 'var(--violet)',
-          
-          success: 'var(--success)',
-          warning: 'var(--warning)',
-          danger: 'var(--danger)',
-          
-          'focus-ring': 'var(--focus-ring)',
-
-          // Aliases for semantic mapping
-          bg: 'var(--background)',
-          card: 'var(--surface)',
-          'card-hover': 'var(--surface-elevated)',
-          'text-muted': 'var(--text-tertiary)',
-          trust: 'var(--accent)',
-          'trust-soft': 'rgba(240, 110, 92, 0.15)',
-          community: 'var(--violet)',
-          'community-soft': 'rgba(139, 124, 246, 0.15)',
+          background: 'var(--ig-bg)',
+          surface: 'var(--ig-surface)',
+          'surface-elevated': 'var(--ig-elevated)',
+          border: 'var(--ig-border)',
+          'border-subtle': 'var(--ig-border-subtle)',
+          'text-primary': 'var(--ig-text-primary)',
+          'text-secondary': 'var(--ig-text-secondary)',
+          'text-tertiary': 'var(--ig-text-tertiary)',
+          accent: 'var(--ig-primary-button)',
+          'accent-hover': 'var(--ig-primary-button-hover)',
         }
       },
       fontFamily: {
-        sans: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
-        display: ['"Outfit"', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'monospace'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+        logo: ['"Plus Jakarta Sans"', '-apple-system', 'sans-serif'],
       },
-      animation: {
-        'fade-in': 'fadeIn 0.2s ease-out',
-        'scale-in': 'scaleIn 0.18s ease-out',
-      },
-      keyframes: {
-        fadeIn: {
-          '0%': { opacity: '0', transform: 'translateY(4px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        scaleIn: {
-          '0%': { opacity: '0', transform: 'scale(0.96)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
-        }
-      }
     },
   },
   plugins: [],

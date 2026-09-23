@@ -1,17 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
-  MessageSquare, 
   Send, 
   Search, 
-  X,
-  UserPlus
+  Smile, 
+  Image as ImageIcon, 
+  Heart, 
+  Info,
+  ArrowLeft,
+  Edit,
+  Phone,
+  Video
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import api from '../services/api';
 import { toast } from 'react-hot-toast';
 import UserAvatar from '../components/common/UserAvatar';
-import EmptyState from '../components/common/EmptyState';
 
 export default function MessagesPage() {
   const { user, isAuthenticated } = useAuthStore();
@@ -31,13 +35,13 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      navigate('/?mode=signin');
+      navigate('/login');
       return;
     }
     fetchConversations();
   }, [isAuthenticated]);
 
-  // Check if a specific user was requested via query param ?user=...
+  // Check if target user requested via URL
   useEffect(() => {
     const targetUserId = searchParams.get('user');
     if (targetUserId) {
@@ -92,7 +96,7 @@ export default function MessagesPage() {
   };
 
   const handleSendMessage = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!inputText.trim() || !selectedUser?._id) return;
 
     const textToSend = inputText.trim();
@@ -128,19 +132,23 @@ export default function MessagesPage() {
       }
       fetchConversations();
     } catch (err) {
-      setMessages(previous => previous.filter(message => message._id !== optimisticMsg._id));
-      setInputText(current => current || textToSend);
+      setMessages(prev => prev.filter(m => m._id !== optimisticMsg._id));
+      setInputText(textToSend);
       toast.error('Failed to deliver message');
     }
   };
 
+  const sendHeartReaction = () => {
+    setInputText('❤️');
+  };
+
+  // Socket listener for real-time messages
   useEffect(() => {
     const receive = ({ detail: message }) => {
       const sender = message.sender?._id || message.sender;
       const recipient = message.recipient?._id || message.recipient;
       if (selectedUser && (sender === selectedUser._id || recipient === selectedUser._id)) {
-        setMessages(previous => previous.some(item => item._id === message._id)
-          ? previous : [...previous, message]);
+        setMessages(prev => prev.some(item => item._id === message._id) ? prev : [...prev, message]);
       }
       fetchConversations();
     };
@@ -174,163 +182,201 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto h-[calc(100vh-6rem)] my-4 px-4 sm:px-6 select-none flex">
-      <div className="w-full h-full bg-[var(--surface)] border border-[var(--border)] rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row">
+    <div className="w-full max-w-[975px] mx-auto h-[calc(100vh-50px)] md:h-[calc(100vh-20px)] md:my-2 px-0 md:px-4 select-none">
+      <div className="w-full h-full bg-[var(--ig-bg)] md:border border-[var(--ig-border)] md:rounded-xl overflow-hidden flex flex-col md:flex-row">
         
-        {/* Left Sidebar: Conversations & User Search */}
-        <div className="w-full md:w-80 lg:w-96 border-r border-[var(--border)] flex flex-col bg-[var(--surface-elevated)]/30">
-          <div className="p-4 border-b border-[var(--border)]">
-            <h2 className="font-display font-bold text-base text-[var(--text-primary)] mb-3">
-              Direct Messages
+        {/* Left Column: Conversations List (Hidden on mobile if user is active) */}
+        <div className={`w-full md:w-[350px] border-r border-[var(--ig-border)] flex flex-col ${
+          selectedUser ? 'hidden md:flex' : 'flex'
+        }`}>
+          {/* Top Bar with username and new message icon */}
+          <div className="h-14 px-6 border-b border-[var(--ig-border)] flex items-center justify-between">
+            <h2 className="text-base font-bold text-[var(--ig-text-primary)]">
+              {user?.username || 'Messages'}
             </h2>
+            <button className="text-[var(--ig-text-primary)] hover:opacity-70">
+              <Edit className="w-5 h-5 stroke-[1.8]" />
+            </button>
+          </div>
+
+          {/* Search Bar */}
+          <div className="p-3 border-b border-[var(--ig-border)]">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ig-text-tertiary)]" />
               <input
                 type="text"
-                placeholder="Search people to message..."
+                placeholder="Search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--text-primary)] rounded-xl pl-9 pr-3 py-2 outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-tertiary)]"
+                className="w-full bg-[var(--ig-elevated)] text-xs text-[var(--ig-text-primary)] placeholder:text-[var(--ig-text-tertiary)] rounded-lg pl-9 pr-3 py-2 outline-none"
               />
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y divide-[var(--border)]/50">
+          {/* Conversations Stream */}
+          <div className="flex-1 overflow-y-auto divide-y divide-[var(--ig-border-subtle)]">
             {searchQuery.trim() ? (
               <div className="p-2 space-y-1">
-                <p className="text-[10px] uppercase font-bold text-[var(--text-tertiary)] px-3 py-1.5 font-mono">
-                  People
-                </p>
-                {searchUserResults.length > 0 ? (
-                  searchUserResults.map((u) => (
-                    <div
-                      key={u._id}
-                      onClick={() => handleSelectConversation(u)}
-                      className="flex items-center gap-3 p-2.5 rounded-2xl hover:bg-[var(--surface-elevated)] cursor-pointer transition-colors"
-                    >
-                      <UserAvatar src={u.avatar} name={u.displayName || u.username} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-[var(--text-primary)] truncate">{u.displayName || u.username}</p>
-                        <p className="text-[10px] text-[var(--text-tertiary)] truncate">@{u.username}</p>
-                      </div>
+                {searchUserResults.map((u) => (
+                  <div
+                    key={u._id}
+                    onClick={() => handleSelectConversation(u)}
+                    className="flex items-center gap-3 p-3 hover:bg-[var(--ig-hover)] cursor-pointer rounded-lg"
+                  >
+                    <UserAvatar src={u.avatar} name={u.displayName || u.username} size="md" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-[var(--ig-text-primary)] truncate">{u.username}</p>
+                      <p className="text-xs text-[var(--ig-text-secondary)] truncate">{u.displayName || u.username}</p>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-[var(--text-tertiary)] text-center py-6">No users found</p>
-                )}
+                  </div>
+                ))}
               </div>
             ) : conversations.length > 0 ? (
               conversations.map((conv) => {
                 const partner = conv.user || {};
                 const isSelected = selectedUser && selectedUser._id === partner._id;
+
                 return (
                   <div
                     key={conv.id || partner._id}
                     onClick={() => handleSelectConversation(partner)}
-                    className={`flex items-center gap-3 p-3.5 cursor-pointer transition-colors ${
-                      isSelected ? 'bg-[var(--surface-elevated)] border-l-4 border-l-[var(--accent)]' : 'hover:bg-[var(--surface-elevated)]/50'
+                    className={`flex items-center gap-3 px-5 py-3.5 cursor-pointer transition-colors ${
+                      isSelected ? 'bg-[var(--ig-hover)]' : 'hover:bg-[var(--ig-hover)]'
                     }`}
                   >
-                    <UserAvatar src={partner.avatar} name={partner.displayName || partner.username} size="md" />
+                    <UserAvatar src={partner.avatar} name={partner.displayName || partner.username} size="lg" />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-bold text-[var(--text-primary)] truncate">
-                          {partner.displayName || partner.username}
-                        </p>
-                        <span className="text-[10px] text-[var(--text-tertiary)]">{formatTimestamp(conv.time)}</span>
-                      </div>
-                      <p className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">
-                        {conv.lastMsg || 'Started a conversation'}
+                      <p className="text-sm font-semibold text-[var(--ig-text-primary)] truncate">
+                        {partner.username || partner.displayName}
+                      </p>
+                      <p className="text-xs text-[var(--ig-text-secondary)] truncate mt-0.5">
+                        {conv.lastMsg || 'Sent a message'}
                       </p>
                     </div>
                   </div>
                 );
               })
             ) : (
-              <div className="p-6 text-center text-xs text-[var(--text-tertiary)]">
-                No active conversations. Search above to start chatting with anyone on HumanHub.
+              <div className="p-8 text-center text-xs text-[var(--ig-text-tertiary)]">
+                No messages yet.
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Side: Message Thread View */}
-        <div className="flex-1 flex flex-col bg-[var(--surface)]">
+        {/* Right Column: Active Thread */}
+        <div className={`flex-1 flex flex-col bg-[var(--ig-surface)] ${
+          !selectedUser ? 'hidden md:flex' : 'flex'
+        }`}>
           {selectedUser ? (
             <>
               {/* Chat Header */}
-              <div className="p-4 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface-elevated)]/30">
-                <div 
-                  onClick={() => navigate(`/u/${selectedUser.username}`)}
-                  className="flex items-center gap-3 cursor-pointer group"
-                >
-                  <UserAvatar src={selectedUser.avatar} name={selectedUser.displayName || selectedUser.username} size="sm" />
-                  <div>
-                    <h3 className="font-display font-bold text-xs sm:text-sm text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
-                      {selectedUser.displayName || selectedUser.username}
-                    </h3>
-                    <p className="text-[10px] text-[var(--text-tertiary)]">@{selectedUser.username}</p>
+              <div className="h-14 px-4 border-b border-[var(--ig-border)] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => setSelectedUser(null)}
+                    className="md:hidden text-[var(--ig-text-primary)] mr-1"
+                  >
+                    <ArrowLeft className="w-6 h-6" />
+                  </button>
+
+                  <div 
+                    onClick={() => navigate(`/u/${selectedUser.username}`)}
+                    className="flex items-center gap-3 cursor-pointer group"
+                  >
+                    <UserAvatar src={selectedUser.avatar} name={selectedUser.displayName || selectedUser.username} size="sm" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-[var(--ig-text-primary)] hover:opacity-80">
+                        {selectedUser.username || selectedUser.displayName}
+                      </h3>
+                      <p className="text-[11px] text-[var(--ig-text-tertiary)]">Active now</p>
+                    </div>
                   </div>
+                </div>
+
+                <div className="flex items-center gap-4 text-[var(--ig-text-primary)]">
+                  <button title="Audio call" className="hover:opacity-70">
+                    <Phone className="w-5 h-5" />
+                  </button>
+                  <button title="Video call" className="hover:opacity-70">
+                    <Video className="w-5 h-5" />
+                  </button>
+                  <button title="Details" className="hover:opacity-70">
+                    <Info className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
 
-              {/* Messages Feed */}
-              <div className="flex-1 p-4 overflow-y-auto space-y-3">
-                {messages.length > 0 ? (
-                  messages.map((m) => {
-                    const isMe = user && (m.sender?._id === user._id || m.sender === user._id);
-                    return (
-                      <div key={m._id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-xs sm:max-w-md px-4 py-2.5 rounded-2xl text-xs leading-relaxed shadow-sm ${
-                          isMe
-                            ? 'bg-[var(--accent)] text-white rounded-br-none'
-                            : 'bg-[var(--surface-elevated)] text-[var(--text-primary)] border border-[var(--border)] rounded-bl-none'
-                        }`}>
-                          <p>{m.body || m.text}</p>
-                          <span className={`block text-[9px] mt-1 text-right ${isMe ? 'text-white/70' : 'text-[var(--text-tertiary)]'}`}>
-                            {formatTimestamp(m.createdAt)}
-                          </span>
-                        </div>
+              {/* Chat Messages */}
+              <div className="flex-1 p-4 overflow-y-auto space-y-2">
+                {messages.map((m) => {
+                  const isMe = user && (m.sender?._id === user._id || m.sender === user._id);
+
+                  return (
+                    <div key={m._id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[70%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed ${
+                        isMe
+                          ? 'bg-[var(--ig-primary-button)] text-white'
+                          : 'bg-[var(--ig-elevated)] text-[var(--ig-text-primary)] border border-[var(--ig-border)]'
+                      }`}>
+                        <p>{m.body || m.text}</p>
                       </div>
-                    );
-                  })
-                ) : (
-                  <div className="h-full flex items-center justify-center text-center">
-                    <EmptyState
-                      icon={MessageSquare}
-                      title={`Conversation with @${selectedUser.username}`}
-                      description="Say hello to break the ice!"
-                    />
-                  </div>
-                )}
+                    </div>
+                  );
+                })}
                 <div ref={messagesEndRef} />
               </div>
 
               {/* Message Composer */}
-              <form onSubmit={handleSendMessage} className="p-3 border-t border-[var(--border)] bg-[var(--surface-elevated)]/40 flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Write a message..."
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  className="flex-1 bg-[var(--surface)] border border-[var(--border)] text-xs text-[var(--text-primary)] rounded-xl px-4 py-2.5 outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-tertiary)]"
-                />
-                <button
-                  type="submit"
-                  disabled={!inputText.trim()}
-                  className="p-2.5 rounded-xl bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity flex items-center justify-center shadow-md"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </form>
+              <div className="p-4">
+                <form onSubmit={handleSendMessage} className="flex items-center gap-2 border border-[var(--ig-border)] rounded-full px-4 py-2 bg-[var(--ig-bg)]">
+                  <Smile className="w-6 h-6 text-[var(--ig-text-primary)] cursor-pointer hover:opacity-70 flex-shrink-0" />
+                  
+                  <input
+                    type="text"
+                    placeholder="Message..."
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    className="flex-1 bg-transparent text-sm text-[var(--ig-text-primary)] placeholder:text-[var(--ig-text-tertiary)] outline-none"
+                  />
+
+                  {inputText.trim() ? (
+                    <button
+                      type="submit"
+                      className="text-sm font-semibold text-[var(--ig-primary-button)] hover:text-[var(--ig-primary-button-hover)] flex-shrink-0"
+                    >
+                      Send
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-3 text-[var(--ig-text-primary)] flex-shrink-0">
+                      <ImageIcon className="w-6 h-6 cursor-pointer hover:opacity-70" />
+                      <Heart 
+                        onClick={sendHeartReaction} 
+                        className="w-6 h-6 cursor-pointer hover:opacity-70 fill-none" 
+                      />
+                    </div>
+                  )}
+                </form>
+              </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center p-6 text-center">
-              <EmptyState
-                icon={MessageSquare}
-                title="Your Messages"
-                description="Send private moments, chats, and thoughts to friends and creators."
-              />
+            /* Empty State when no conversation selected on desktop */
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none">
+              <div className="w-24 h-24 rounded-full border-2 border-[var(--ig-text-primary)] flex items-center justify-center mb-4 text-[var(--ig-text-primary)]">
+                <Send className="w-12 h-12 stroke-[1.5] -translate-x-1 translate-y-1" />
+              </div>
+              <h3 className="text-xl font-normal text-[var(--ig-text-primary)] mb-1">
+                Your messages
+              </h3>
+              <p className="text-sm text-[var(--ig-text-secondary)] mb-5 max-w-xs">
+                Send private photos and messages to a friend or group.
+              </p>
+              <button
+                onClick={() => {}}
+                className="ig-btn-primary"
+              >
+                Send message
+              </button>
             </div>
           )}
         </div>

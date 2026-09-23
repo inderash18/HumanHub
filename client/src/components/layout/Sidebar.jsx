@@ -12,6 +12,7 @@ import {
   Settings, 
   User,
   Fingerprint,
+  Sparkles,
   X,
   Sun,
   Moon
@@ -86,6 +87,11 @@ export default function Sidebar() {
       path: '/explore', 
       label: 'Discover', 
       icon: Compass 
+    },
+    { 
+      path: '/reels', 
+      label: 'Moments', 
+      icon: Sparkles 
     },
     { 
       path: '/communities', 

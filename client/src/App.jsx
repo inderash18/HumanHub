@@ -5,7 +5,9 @@ import HomePage from "./pages/HomePage";
 import FeedPage from "./pages/FeedPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import OnboardingPage from "./pages/OnboardingPage";
 import ExplorePage from "./pages/ExplorePage";
+import ReelsPage from "./pages/ReelsPage";
 import CommunitiesPage from "./pages/CommunitiesPage";
 import CommunityPage from "./pages/CommunityPage";
 import SavedPostsPage from "./pages/SavedPostsPage";
@@ -14,6 +16,7 @@ import NotificationsPage from "./pages/NotificationsPage";
 import PostDetailPage from "./pages/PostDetailPage";
 import UserProfilePage from "./pages/UserProfilePage";
 import SettingsPage from "./pages/SettingsPage";
+import ModeratorDashboard from "./pages/ModeratorDashboard";
 import { useSocket } from "./hooks/useSocket";
 
 export default function App() {
@@ -26,7 +29,9 @@ export default function App() {
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/feed" element={<FeedPage />} />
+          <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/explore" element={<ExplorePage />} />
+          <Route path="/reels" element={<ReelsPage />} />
           <Route path="/communities" element={<CommunitiesPage />} />
           <Route path="/c/:slug" element={<CommunityPage />} />
           <Route path="/saved" element={<SavedPostsPage />} />
@@ -35,6 +40,7 @@ export default function App() {
           <Route path="/p/:id" element={<PostDetailPage />} />
           <Route path="/u/:username" element={<UserProfilePage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/moderator" element={<ModeratorDashboard />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Route>

@@ -1,49 +1,110 @@
-import { useAuthStore } from '../store/authStore';
+import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
-import ModerationQueue from '../components/moderation/ModerationQueue';
-import BanPanel from '../components/moderation/BanPanel';
+import { ShieldCheck, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { useAuthStore } from '../store/useAuthStore';
+import api from '../services/api';
+import { toast } from 'react-hot-toast';
+import EmptyState from '../components/common/EmptyState';
+import Button from '../components/ui/Button';
 
 export default function ModeratorDashboard() {
-     const { user } = useAuthStore();
+  const { user } = useAuthStore();
+  const [queue, setQueue] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-     if (!user || (user.role !== 'admin' && user.role !== 'moderator')) {
-          return <Navigate to="/feed" replace />;
-     }
+  if (!user || (user.role !== 'admin' && user.role !== 'moderator')) {
+    return <Navigate to="/feed" replace />;
+  }
 
-     return (
-          <div className="max-w-6xl mx-auto py-8">
-               <div className="mb-10 pb-6 border-b border-white/5">
-                    <h1 className="text-3xl font-playfair font-bold text-brand-danger mb-2 flex items-center gap-3">
-                        Moderation Command
-                        <span className="text-xs bg-brand-danger/20 px-2 py-1 rounded font-mono uppercase tracking-widest text-brand-danger border border-brand-danger/30">Secure Area</span>
-                    </h1>
-                    <p className="text-brand-muted font-jakarta">Review borderline pipeline triggers, issue bans, and monitor platform integrity signals live.</p>
-               </div>
+  useEffect(() => {
+    fetchQueue();
+  }, []);
 
-               <div className="grid lg:grid-cols-3 gap-10">
-                    <div className="lg:col-span-2 space-y-8">
-                         <h3 className="font-playfair text-xl font-bold text-white mb-4 pl-3 border-l-2 border-brand-danger">Active Queue</h3>
-                         <ModerationQueue />
-                    </div>
+  const fetchQueue = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/moderation/queue').catch(() => ({ data: [] }));
+      setQueue(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      setQueue([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-                    <div className="space-y-8">
-                         <h3 className="font-playfair text-xl font-bold text-white mb-4 pl-3 border-l-2 border-brand-danger/50">Rapid Actions</h3>
-                         <div className="glass p-6 rounded-xl border border-white/5">
-                             <h4 className="font-bold text-sm text-brand-muted uppercase mb-4 font-mono">Direct User Neutralization</h4>
-                             <BanPanel targetUserId={"placeholder-id"} />
-                         </div>
+  const handleAction = async (itemId, action) => {
+    try {
+      await api.post(`/moderation/${itemId}/${action}`);
+      toast.success(`Item marked as ${action}`);
+      setQueue((prev) => prev.filter(item => item._id !== itemId));
+    } catch (err) {
+      toast.error(`Failed to ${action} item`);
+    }
+  };
 
-                         <div className="glass p-6 rounded-xl border border-brand-gold/20">
-                             <h4 className="font-bold text-sm text-brand-gold uppercase mb-4 font-mono">System Integrity Metrics</h4>
-                             <ul className="space-y-3 font-mono text-sm">
-                                 <li className="flex justify-between text-brand-text/70"><span>Pipeline Load</span> <span className="text-brand-success font-bold">Stable</span></li>
-                                 <li className="flex justify-between text-brand-text/70"><span>Redis Tasks</span> <span>142 req/min</span></li>
-                                 <li className="flex justify-between text-brand-text/70"><span>Avg Response</span> <span>420ms</span></li>
-                                 <li className="flex justify-between text-brand-text/70"><span>Bans (24h)</span> <span className="text-brand-danger">2,104</span></li>
-                             </ul>
-                         </div>
-                    </div>
-               </div>
+  return (
+    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 select-none space-y-6">
+      <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-[var(--danger)]/15 border border-[var(--danger)]/30 flex items-center justify-center text-[var(--danger)]">
+            <ShieldCheck className="w-5 h-5" />
           </div>
-     );
+          <div>
+            <h1 className="font-display text-xl sm:text-2xl font-bold text-[var(--text-primary)]">
+              Moderation Dashboard
+            </h1>
+            <p className="text-xs text-[var(--text-tertiary)]">Review flagged and reported content to keep HumanHub safe.</p>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="py-20 text-center text-xs text-[var(--text-tertiary)]">
+          Loading moderation queue...
+        </div>
+      ) : queue.length > 0 ? (
+        <div className="space-y-4">
+          {queue.map((item) => (
+            <div
+              key={item._id}
+              className="p-5 rounded-3xl bg-[var(--surface)] border border-[var(--border)] shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+            >
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-bold text-[var(--warning)] bg-[var(--warning)]/10 px-2 py-0.5 rounded-md">
+                  {item.reason || 'Flagged Content'}
+                </span>
+                <p className="text-xs text-[var(--text-primary)] mt-1 font-medium">{item.contentSummary || 'User content report'}</p>
+                <p className="text-[11px] text-[var(--text-tertiary)]">Reported by: @{item.reportedBy?.username || 'user'}</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleAction(item._id, 'approve')}
+                  icon={CheckCircle2}
+                >
+                  Approve
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => handleAction(item._id, 'remove')}
+                  icon={XCircle}
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={ShieldCheck}
+          title="Queue is Clear"
+          description="There are no pending reports or moderation items to review."
+        />
+      )}
+    </div>
+  );
 }

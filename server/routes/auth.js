@@ -15,7 +15,8 @@ import {
   disableMfa,
   getActiveSessions,
   revokeSessionEndpoint,
-  revokeOtherSessionsEndpoint
+  revokeOtherSessionsEndpoint,
+  changePassword
 } from '../controllers/authController.js';
 import { protect } from '../middleware/auth.js';
 import { requireTrustedOrigin } from '../config/security.js';
@@ -37,6 +38,7 @@ router.post('/logout', requireTrustedOrigin, logoutUser);
 
 // Protected user profile & security flows
 router.get('/me', protect, getMe);
+router.put('/password', protect, changePassword);
 
 // MFA endpoints
 router.post('/mfa/setup', protect, setupMfa);

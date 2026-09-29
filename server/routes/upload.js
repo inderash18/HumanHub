@@ -106,8 +106,8 @@ router.get('/:filename', optionalProtect, asyncHandler(async (req, res) => {
 }));
 
 // Upload handler
-router.post('/', protect, upload.array('files', 10), asyncHandler(async (req, res) => {
-  const files = req.files || [];
+router.post('/', protect, upload.any(), asyncHandler(async (req, res) => {
+  const files = req.files || (req.file ? [req.file] : []);
   if (!files.length) return res.status(400).json({ message: 'No files uploaded' });
   try {
     for (const file of files) {
@@ -125,7 +125,14 @@ router.post('/', protect, upload.array('files', 10), asyncHandler(async (req, re
     return res.status(400).json({ message: 'Invalid media file. Upload a supported image or video.' });
   }
   const urls = files.map(file => '/api/uploads/' + file.filename);
-  res.status(201).json({ success: true, message: 'Files uploaded', urls, url: urls[0] });
+  res.status(201).json({ 
+    success: true, 
+    message: 'Files uploaded', 
+    urls, 
+    url: urls[0],
+    fileUrl: urls[0],
+    path: urls[0]
+  });
 }));
 
 export default router;

@@ -574,6 +574,45 @@ export const resetPassword = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Change password for authenticated user
+// @route   PUT /api/auth/password
+// @access  Private
+export const changePassword = asyncHandler(async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+
+  if (!oldPassword || !newPassword) {
+    res.status(400);
+    throw new Error('Please provide current and new passwords');
+  }
+
+  if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) {
+    res.status(400);
+    throw new Error(`New password must be ${MIN_PASSWORD_LENGTH}–${MAX_PASSWORD_LENGTH} characters`);
+  }
+
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+
+  const isMatch = await verifyPassword(oldPassword, user.passwordHash);
+  if (!isMatch) {
+    res.status(400);
+    throw new Error('Current password is incorrect');
+  }
+
+  user.passwordHash = await hashPassword(newPassword);
+  user.passwordVersion = (user.passwordVersion || 1) + 1;
+  user.lastPasswordChange = new Date();
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Password updated successfully'
+  });
+});
+
 // @desc    Logout user / clear cookie
 // @route   POST /api/auth/logout
 // @access  Public

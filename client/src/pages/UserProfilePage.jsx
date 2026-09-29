@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   Grid, 
   Bookmark, 
@@ -11,14 +11,17 @@ import {
   MessageCircle, 
   Camera,
   X,
-  Sparkles,
-  Link as LinkIcon
+  Lock,
+  RefreshCw,
+  UserCheck,
+  UserPlus
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/useAuthStore';
 import api from '../services/api';
 import UserAvatar from '../components/common/UserAvatar';
 import EmptyState from '../components/common/EmptyState';
+import ErrorState from '../components/common/ErrorState';
 import { ProfileSkeleton } from '../components/common/SkeletonLoader';
 
 export default function UserProfilePage() {
@@ -32,10 +35,19 @@ export default function UserProfilePage() {
   const [savedPosts, setSavedPosts] = useState([]);
   const [activeTab, setActiveTab] = useState('posts'); // 'posts' | 'reels' | 'saved' | 'tagged'
   const [loading, setLoading] = useState(true);
+  const [errorStatus, setErrorStatus] = useState(null); // '404' | 'error' | null
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+
+  // Followers / Following Modal
+  const [userListModal, setUserListModal] = useState({
+    open: false,
+    title: '',
+    users: [],
+    loading: false
+  });
 
   const [editForm, setEditForm] = useState({
     displayName: '',
@@ -44,22 +56,22 @@ export default function UserProfilePage() {
   const [savingEdit, setSavingEdit] = useState(false);
 
   const targetUsername = username || currentUser?.username;
-  const isOwnProfile = currentUser && (currentUser.username?.toLowerCase() === targetUsername?.toLowerCase());
+  const isOwnProfile = Boolean(
+    currentUser && 
+    targetUsername && 
+    (currentUser.username?.toLowerCase() === targetUsername?.toLowerCase())
+  );
 
-  useEffect(() => {
-    if (targetUsername) {
-      fetchUserProfile();
-    }
-  }, [targetUsername]);
-
-  const fetchUserProfile = async () => {
+  const fetchUserProfile = useCallback(async () => {
+    if (!targetUsername) return;
     try {
       setLoading(true);
-      const res = await api.get(`/users/profile/${targetUsername}`);
+      setErrorStatus(null);
+      const res = await api.get(`/users/profile/${encodeURIComponent(targetUsername)}`);
       const data = res.data?.profile || res.data?.user || res.data || {};
       setProfile(data);
       setPosts(res.data?.posts || []);
-      setIsFollowing(data.isFollowing || false);
+      setIsFollowing(Boolean(data.isFollowing));
 
       setEditForm({
         displayName: data.displayName || data.username || '',
@@ -70,12 +82,22 @@ export default function UserProfilePage() {
         fetchSavedPosts();
       }
     } catch (err) {
+      const status = err.response?.status;
+      if (status === 404) {
+        setErrorStatus('404');
+      } else {
+        setErrorStatus('error');
+      }
       setProfile(null);
       setPosts([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [targetUsername, isOwnProfile]);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, [fetchUserProfile]);
 
   const fetchSavedPosts = async () => {
     try {
@@ -83,6 +105,30 @@ export default function UserProfilePage() {
       setSavedPosts(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       setSavedPosts([]);
+    }
+  };
+
+  const handleOpenUserList = async (type) => {
+    if (!profile) return;
+    const title = type === 'followers' ? 'Followers' : 'Following';
+    setUserListModal({
+      open: true,
+      title,
+      users: [],
+      loading: true
+    });
+
+    try {
+      const targetId = profile._id || profile.username;
+      const res = await api.get(`/users/${targetId}/${type}`);
+      setUserListModal(prev => ({
+        ...prev,
+        users: Array.isArray(res.data) ? res.data : [],
+        loading: false
+      }));
+    } catch (err) {
+      toast.error(`Failed to load ${type}`);
+      setUserListModal(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -129,7 +175,9 @@ export default function UserProfilePage() {
       setIsFollowing(nextState);
       setProfile(prev => ({
         ...prev,
-        followersCount: nextState ? (prev.followersCount || 0) + 1 : Math.max(0, (prev.followersCount || 0) - 1),
+        followersCount: nextState 
+          ? (prev.followersCount || 0) + 1 
+          : Math.max(0, (prev.followersCount || 0) - 1),
         isFollowing: nextState
       }));
     } catch (err) {
@@ -169,7 +217,7 @@ export default function UserProfilePage() {
     );
   }
 
-  if (!profile) {
+  if (errorStatus === '404' || (!profile && errorStatus !== 'error')) {
     return (
       <div className="w-full max-w-[935px] mx-auto px-4 py-16 text-center">
         <EmptyState 
@@ -182,22 +230,55 @@ export default function UserProfilePage() {
     );
   }
 
-  const displayedPosts = activeTab === 'saved' ? savedPosts : posts;
+  if (errorStatus === 'error' || !profile) {
+    return (
+      <div className="w-full max-w-[935px] mx-auto px-4 py-16 text-center">
+        <ErrorState 
+          title="Couldn't load profile"
+          message="There was an issue loading this profile. Please check your connection and try again."
+          onRetry={fetchUserProfile}
+        />
+      </div>
+    );
+  }
+
+  // Filter posts based on active tab
+  let displayedPosts = posts;
+  if (activeTab === 'saved') {
+    displayedPosts = savedPosts;
+  } else if (activeTab === 'reels') {
+    displayedPosts = posts.filter(post => {
+      const media = post.mediaUrls?.[0] || '';
+      return media.endsWith('.mp4') || media.endsWith('.webm') || post.type === 'reel';
+    });
+  } else if (activeTab === 'tagged') {
+    displayedPosts = [];
+  }
+
+  const isPrivateAccount = profile.privacySettings?.isPrivate && !isOwnProfile && !isFollowing;
 
   return (
     <div className="w-full max-w-[935px] mx-auto px-4 sm:px-6 py-6 md:py-10 select-none">
       
       {/* 1. Header Profile Section */}
-      <header className="flex flex-col md:flex-row items-center md:items-start gap-8 md:gap-24 mb-10 pb-4">
+      <header className="flex flex-col md:flex-row items-center md:items-start gap-8 md:gap-20 mb-10 pb-4">
         {/* Large Avatar */}
         <div className="relative flex-shrink-0">
-          <div className="cursor-pointer" onClick={() => isOwnProfile && fileInputRef.current?.click()}>
+          <div 
+            className={`cursor-pointer relative group ${uploadingAvatar ? 'opacity-50 pointer-events-none' : ''}`} 
+            onClick={() => isOwnProfile && fileInputRef.current?.click()}
+          >
             <UserAvatar 
               src={profile.avatar} 
               name={profile.displayName || profile.username} 
               size="3xl"
               hasStory={true}
             />
+            {isOwnProfile && (
+              <div className="absolute inset-0 rounded-full bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                <Camera className="w-6 h-6" />
+              </div>
+            )}
           </div>
           {isOwnProfile && (
             <input 
@@ -235,7 +316,7 @@ export default function UserProfilePage() {
                   </button>
                   <button 
                     onClick={() => navigate('/settings')}
-                    className="p-1.5 text-[var(--ig-text-primary)] hover:opacity-70"
+                    className="p-1.5 text-[var(--ig-text-primary)] hover:opacity-70 transition-opacity"
                     title="Settings"
                   >
                     <Settings className="w-5 h-5" />
@@ -266,16 +347,22 @@ export default function UserProfilePage() {
           </div>
 
           {/* Row 2: Counts (Posts, Followers, Following) */}
-          <ul className="flex items-center justify-center md:justify-start gap-10 text-sm">
+          <ul className="flex items-center justify-center md:justify-start gap-8 text-sm">
             <li>
-              <span className="font-semibold text-[var(--ig-text-primary)]">{profile.postsCount || posts.length}</span>{' '}
+              <span className="font-semibold text-[var(--ig-text-primary)]">{profile.postsCount ?? posts.length}</span>{' '}
               <span className="text-[var(--ig-text-primary)]">posts</span>
             </li>
-            <li>
+            <li 
+              className="cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => handleOpenUserList('followers')}
+            >
               <span className="font-semibold text-[var(--ig-text-primary)]">{profile.followersCount || 0}</span>{' '}
               <span className="text-[var(--ig-text-primary)]">followers</span>
             </li>
-            <li>
+            <li 
+              className="cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => handleOpenUserList('following')}
+            >
               <span className="font-semibold text-[var(--ig-text-primary)]">{profile.followingCount || 0}</span>{' '}
               <span className="text-[var(--ig-text-primary)]">following</span>
             </li>
@@ -294,7 +381,7 @@ export default function UserProfilePage() {
       </header>
 
       {/* 2. Story Highlights Tray */}
-      <div className="flex items-center gap-6 overflow-x-auto no-scrollbar py-2 mb-10 select-none">
+      <div className="flex items-center gap-6 overflow-x-auto no-scrollbar py-2 mb-8 select-none">
         {isOwnProfile && (
           <div className="flex flex-col items-center gap-2 cursor-pointer group">
             <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-[var(--ig-border)] bg-[var(--ig-elevated)] flex items-center justify-center text-[var(--ig-text-tertiary)] group-hover:text-[var(--ig-text-primary)] transition-colors">
@@ -309,7 +396,7 @@ export default function UserProfilePage() {
       <div className="border-t border-[var(--ig-border)] flex items-center justify-center gap-12 text-xs font-semibold uppercase tracking-widest">
         <button
           onClick={() => setActiveTab('posts')}
-          className={`flex items-center gap-1.5 py-4 border-t ${
+          className={`flex items-center gap-1.5 py-4 border-t transition-colors ${
             activeTab === 'posts'
               ? 'border-[var(--ig-text-primary)] text-[var(--ig-text-primary)] -mt-[1px]'
               : 'border-transparent text-[var(--ig-text-tertiary)] hover:text-[var(--ig-text-secondary)]'
@@ -320,7 +407,7 @@ export default function UserProfilePage() {
 
         <button
           onClick={() => setActiveTab('reels')}
-          className={`flex items-center gap-1.5 py-4 border-t ${
+          className={`flex items-center gap-1.5 py-4 border-t transition-colors ${
             activeTab === 'reels'
               ? 'border-[var(--ig-text-primary)] text-[var(--ig-text-primary)] -mt-[1px]'
               : 'border-transparent text-[var(--ig-text-tertiary)] hover:text-[var(--ig-text-secondary)]'
@@ -332,7 +419,7 @@ export default function UserProfilePage() {
         {isOwnProfile && (
           <button
             onClick={() => setActiveTab('saved')}
-            className={`flex items-center gap-1.5 py-4 border-t ${
+            className={`flex items-center gap-1.5 py-4 border-t transition-colors ${
               activeTab === 'saved'
                 ? 'border-[var(--ig-text-primary)] text-[var(--ig-text-primary)] -mt-[1px]'
                 : 'border-transparent text-[var(--ig-text-tertiary)] hover:text-[var(--ig-text-secondary)]'
@@ -344,7 +431,7 @@ export default function UserProfilePage() {
 
         <button
           onClick={() => setActiveTab('tagged')}
-          className={`flex items-center gap-1.5 py-4 border-t ${
+          className={`flex items-center gap-1.5 py-4 border-t transition-colors ${
             activeTab === 'tagged'
               ? 'border-[var(--ig-text-primary)] text-[var(--ig-text-primary)] -mt-[1px]'
               : 'border-transparent text-[var(--ig-text-tertiary)] hover:text-[var(--ig-text-secondary)]'
@@ -354,8 +441,20 @@ export default function UserProfilePage() {
         </button>
       </div>
 
-      {/* 4. 3-Column Posts Media Grid */}
-      {displayedPosts.length > 0 ? (
+      {/* 4. Private Account Warning or Posts Media Grid */}
+      {isPrivateAccount ? (
+        <div className="py-20 text-center border-t border-[var(--ig-border)]">
+          <div className="w-16 h-16 rounded-full border-2 border-[var(--ig-border)] flex items-center justify-center mx-auto mb-4 text-[var(--ig-text-secondary)]">
+            <Lock className="w-8 h-8 stroke-[1.5]" />
+          </div>
+          <h3 className="text-base font-bold text-[var(--ig-text-primary)] mb-1">
+            This account is private
+          </h3>
+          <p className="text-xs text-[var(--ig-text-secondary)] max-w-sm mx-auto">
+            Follow this account to see their photos and videos.
+          </p>
+        </div>
+      ) : displayedPosts.length > 0 ? (
         <div className="grid grid-cols-3 gap-1 md:gap-7">
           {displayedPosts.map((post) => {
             const mediaUrls = post.mediaUrls || [];
@@ -403,16 +502,98 @@ export default function UserProfilePage() {
       ) : (
         <div className="py-16 text-center">
           <div className="w-16 h-16 rounded-full border-2 border-[var(--ig-border)] flex items-center justify-center mx-auto mb-4 text-[var(--ig-text-secondary)]">
-            <Camera className="w-8 h-8 stroke-[1.5]" />
+            {activeTab === 'saved' ? (
+              <Bookmark className="w-8 h-8 stroke-[1.5]" />
+            ) : activeTab === 'reels' ? (
+              <Film className="w-8 h-8 stroke-[1.5]" />
+            ) : activeTab === 'tagged' ? (
+              <Tag className="w-8 h-8 stroke-[1.5]" />
+            ) : (
+              <Camera className="w-8 h-8 stroke-[1.5]" />
+            )}
           </div>
-          <h3 className="text-2xl font-bold text-[var(--ig-text-primary)] mb-1">
-            {activeTab === 'saved' ? 'Save photos and videos' : 'Share Photos'}
+          <h3 className="text-xl sm:text-2xl font-bold text-[var(--ig-text-primary)] mb-1">
+            {activeTab === 'saved' 
+              ? 'Save photos and videos' 
+              : activeTab === 'reels'
+              ? 'No reels yet'
+              : activeTab === 'tagged'
+              ? 'Photos of you'
+              : 'Share Photos'}
           </h3>
           <p className="text-xs text-[var(--ig-text-secondary)] max-w-sm mx-auto">
             {activeTab === 'saved' 
-              ? 'Save photos and videos that you want to see again. No one is notified, and only you can see what you’ve saved.' 
+              ? 'Save photos and videos that you want to see again. Only you can see what you’ve saved.' 
+              : activeTab === 'reels'
+              ? 'When video posts are shared, they will appear here.'
+              : activeTab === 'tagged'
+              ? 'When people tag you in photos, they will appear here.'
               : 'When you share photos, they will appear on your profile.'}
           </p>
+        </div>
+      )}
+
+      {/* Followers / Following Dialog Modal */}
+      {userListModal.open && (
+        <div 
+          onClick={() => setUserListModal(prev => ({ ...prev, open: false }))}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 animate-fade-in"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[var(--ig-elevated)] border border-[var(--ig-border)] rounded-2xl max-w-sm w-full max-h-[480px] flex flex-col shadow-2xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--ig-border)]">
+              <h3 className="text-sm font-semibold text-[var(--ig-text-primary)]">
+                {userListModal.title}
+              </h3>
+              <button
+                onClick={() => setUserListModal(prev => ({ ...prev, open: false }))}
+                className="text-[var(--ig-text-tertiary)] hover:text-[var(--ig-text-primary)]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 overflow-y-auto flex-1 divide-y divide-[var(--ig-border)]/50">
+              {userListModal.loading ? (
+                <div className="py-8 text-center text-xs text-[var(--ig-text-secondary)]">
+                  Loading...
+                </div>
+              ) : userListModal.users.length === 0 ? (
+                <div className="py-8 text-center text-xs text-[var(--ig-text-secondary)]">
+                  No users found.
+                </div>
+              ) : (
+                userListModal.users.map((u) => (
+                  <div 
+                    key={u._id} 
+                    className="flex items-center justify-between py-2.5 px-2 hover:bg-[var(--ig-highlight)] rounded-xl transition-colors"
+                  >
+                    <Link 
+                      to={`/u/${u.username}`}
+                      onClick={() => setUserListModal(prev => ({ ...prev, open: false }))}
+                      className="flex items-center gap-3 min-w-0 flex-1"
+                    >
+                      <UserAvatar 
+                        src={u.avatar} 
+                        name={u.displayName || u.username} 
+                        size="md" 
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-[var(--ig-text-primary)] truncate">
+                          {u.username}
+                        </p>
+                        <p className="text-[11px] text-[var(--ig-text-secondary)] truncate">
+                          {u.displayName || u.username}
+                        </p>
+                      </div>
+                    </Link>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -479,7 +660,7 @@ export default function UserProfilePage() {
                   disabled={savingEdit}
                   className="ig-btn-primary text-xs"
                 >
-                  Submit
+                  {savingEdit ? 'Saving...' : 'Submit'}
                 </button>
               </div>
             </form>

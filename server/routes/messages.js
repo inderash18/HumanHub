@@ -14,6 +14,7 @@ router.use(protect);
 router.post('/', sendMessage);
 router.post('/send', sendMessage);
 router.get('/conversations', getConversations);
+router.get('/conversations/active', getConversations);
 router.get('/unread-count', getUnreadMessagesCount);
 router.get('/:userId', getMessages);
 

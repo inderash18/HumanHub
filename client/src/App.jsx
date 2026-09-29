@@ -17,6 +17,7 @@ import PostDetailPage from "./pages/PostDetailPage";
 import UserProfilePage from "./pages/UserProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import ModeratorDashboard from "./pages/ModeratorDashboard";
+import SubmitPostPage from "./pages/SubmitPostPage";
 import { useSocket } from "./hooks/useSocket";
 
 export default function App() {
@@ -42,6 +43,8 @@ export default function App() {
           <Route path="/moderation" element={<ModeratorDashboard />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/moderator" element={<ModeratorDashboard />} />
+          <Route path="/submit" element={<SubmitPostPage />} />
+          <Route path="/create" element={<SubmitPostPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Route>

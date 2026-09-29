@@ -66,7 +66,7 @@ export default function StoriesTray() {
     try {
       setUploading(true);
       const formData = new FormData();
-      formData.append('media', selectedFile);
+      formData.append('files', selectedFile);
 
       // Upload media file
       const uploadRes = await api.post('/upload', formData, {

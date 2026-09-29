@@ -17,12 +17,16 @@ const escapeRegex = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // @access  Public (Optional Auth)
 export const getUserProfile = asyncHandler(async (req, res) => {
   const identifier = req.params.id || req.params.username;
-  const isObjectId = mongoose.Types.ObjectId.isValid(identifier);
+  const cleanId = String(identifier || '').trim();
+  if (!cleanId) {
+    res.status(404);
+    throw new Error('User not found');
+  }
 
-  const user = await (isObjectId 
-    ? User.findById(identifier) 
-    : User.findOne({ username: identifier.toLowerCase().trim() }))
-    .select('-passwordHash');
+  let user = await User.findOne({ username: cleanId.toLowerCase() }).select('-passwordHash');
+  if (!user && mongoose.Types.ObjectId.isValid(cleanId)) {
+    user = await User.findById(cleanId).select('-passwordHash');
+  }
 
   if (!user || user.isBanned) {
     res.status(404);
@@ -280,11 +284,31 @@ export const unblockUser = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: 'User unblocked successfully' });
 });
 
+// @desc    Get blocked users list
+// @route   GET /api/users/blocked
+// @access  Private
+export const getBlockedUsers = asyncHandler(async (req, res) => {
+  const blockedRecords = await Block.find({ blocker: req.user._id })
+    .populate('blocked', 'username displayName avatar bio')
+    .sort({ createdAt: -1 });
+
+  const blockedUsers = blockedRecords.map(b => b.blocked).filter(Boolean);
+  res.status(200).json(blockedUsers);
+});
+
 // @desc    Get user followers
 // @route   GET /api/users/:id/followers
 // @access  Public
 export const getUserFollowers = asyncHandler(async (req, res) => {
-  const targetId = req.params.id;
+  const identifier = req.params.id;
+  let targetId = identifier;
+
+  if (!mongoose.Types.ObjectId.isValid(identifier)) {
+    const user = await User.findOne({ username: identifier.toLowerCase() });
+    if (!user) return res.status(200).json([]);
+    targetId = user._id;
+  }
+
   const followRecords = await Follow.find({ following: targetId })
     .populate('follower', 'username displayName avatar bio')
     .sort({ createdAt: -1 });
@@ -297,7 +321,15 @@ export const getUserFollowers = asyncHandler(async (req, res) => {
 // @route   GET /api/users/:id/following
 // @access  Public
 export const getUserFollowing = asyncHandler(async (req, res) => {
-  const targetId = req.params.id;
+  const identifier = req.params.id;
+  let targetId = identifier;
+
+  if (!mongoose.Types.ObjectId.isValid(identifier)) {
+    const user = await User.findOne({ username: identifier.toLowerCase() });
+    if (!user) return res.status(200).json([]);
+    targetId = user._id;
+  }
+
   const followRecords = await Follow.find({ follower: targetId })
     .populate('following', 'username displayName avatar bio')
     .sort({ createdAt: -1 });

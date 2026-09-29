@@ -10,6 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
     "@fontsource/fira-code": "^5.0.0",
     "@fontsource/playfair-display": "^5.0.0",
     "@fontsource/plus-jakarta-sans": "^5.0.0",

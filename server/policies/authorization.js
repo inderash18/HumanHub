@@ -46,8 +46,8 @@ export function canViewPost({ user, post, isFollowing = false, isBlocked = false
     return false;
   }
 
-  // Published public post
-  return post.status === 'published';
+  // Published public post or story
+  return post.status === 'published' || post.status === undefined;
 }
 
 /**

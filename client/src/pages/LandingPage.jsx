@@ -137,17 +137,21 @@ export default function LandingPage() {
 
     try {
       setRegLoading(true);
-      await registerUser({
+      const res = await registerUser({
         email: regEmail.trim(),
         username: regUsername.trim().toLowerCase(),
         displayName: regDisplayName.trim() || regUsername.trim(),
         password: regPassword
       });
 
-      toast.success('Verification code sent to your email!');
-      setOtpEmail(regEmail.trim());
-      setOtpModalOpen(true);
-      setResendCooldown(60);
+      if (res?.success || res?.token) {
+        toast.success('Welcome to HumanHub! Account created successfully.');
+        navigate('/feed');
+        return;
+      }
+
+      toast.success('Account created!');
+      navigate('/feed');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {

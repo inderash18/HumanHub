@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Image as ImageIcon, X, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Plus, Image as ImageIcon, X } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
+import { useSocketStore } from '../../store/useSocketStore';
 import api, { getRetryAfterSeconds } from '../../services/api';
+import { fetchStories, createStory } from '../../services/storyService';
 import StoryViewerModal from './StoryViewerModal';
 import UserAvatar from '../common/UserAvatar';
 import Modal from '../ui/Modal';
@@ -10,9 +12,16 @@ import { toast } from 'react-hot-toast';
 
 export default function StoriesTray() {
   const { user } = useAuthStore();
-  const [stories, setStories] = useState([]);
-  const [activeStoryIndex, setActiveStoryIndex] = useState(null);
+  const socket = useSocketStore(s => s.socket);
+
+  const [myStories, setMyStories] = useState([]);
+  const [storyGroups, setStoryGroups] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Viewer Modal State
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [activeViewerGroups, setActiveViewerGroups] = useState([]);
+  const [initialGroupIndex, setInitialGroupIndex] = useState(0);
 
   // Story Creation State
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -22,21 +31,85 @@ export default function StoriesTray() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
-  useEffect(() => {
-    fetchStories();
-  }, []);
-
-  const fetchStories = async () => {
+  // Fetch stories scoped to current account
+  const loadStories = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await api.get('/stories');
-      setStories(Array.isArray(res.data) ? res.data : []);
+      const data = await fetchStories();
+
+      if (data && typeof data === 'object') {
+        const my = Array.isArray(data.myStories) ? data.myStories : [];
+        const groups = Array.isArray(data.storyGroups) ? data.storyGroups : [];
+
+        // Fallback for flat array response
+        if (!data.storyGroups && Array.isArray(data)) {
+          const currentUserId = user?._id?.toString();
+          const userStories = [];
+          const otherMap = new Map();
+
+          data.forEach(s => {
+            if (!s || !s.author) return;
+            const authorId = s.author._id?.toString() || s.author?.toString();
+            if (currentUserId && authorId === currentUserId) {
+              userStories.push(s);
+            } else {
+              if (!otherMap.has(authorId)) {
+                otherMap.set(authorId, {
+                  author: s.author,
+                  stories: [],
+                  hasUnviewed: false
+                });
+              }
+              otherMap.get(authorId).stories.push(s);
+            }
+          });
+
+          setMyStories(userStories);
+          setStoryGroups(Array.from(otherMap.values()));
+        } else {
+          setMyStories(my);
+          setStoryGroups(groups);
+        }
+      } else {
+        setMyStories([]);
+        setStoryGroups([]);
+      }
     } catch {
-      setStories([]);
+      setMyStories([]);
+      setStoryGroups([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?._id]);
+
+  // Reset & load on account change or mount
+  useEffect(() => {
+    setMyStories([]);
+    setStoryGroups([]);
+    setViewerOpen(false);
+    loadStories();
+  }, [user?._id, loadStories]);
+
+  // Real-time socket sync for story events
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleStoryCreated = () => {
+      loadStories();
+    };
+
+    const handleStoryDeleted = () => {
+      loadStories();
+    };
+
+    socket.on('story:created', handleStoryCreated);
+    socket.on('story:deleted', handleStoryDeleted);
+
+    return () => {
+      socket.off('story:created', handleStoryCreated);
+      socket.off('story:deleted', handleStoryDeleted);
+    };
+  }, [socket, loadStories]);
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -47,8 +120,8 @@ export default function StoriesTray() {
       return;
     }
 
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error('File size must be under 20MB');
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error('File size must be under 25MB');
       return;
     }
 
@@ -73,21 +146,18 @@ export default function StoriesTray() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      const mediaUrl = uploadRes.data?.url || uploadRes.data?.fileUrl || uploadRes.data?.path;
+      const mediaUrl = uploadRes.data?.url || uploadRes.data?.fileUrl || uploadRes.data?.path || uploadRes.data?.urls?.[0];
       if (!mediaUrl) throw new Error('Upload failed: no media URL returned');
 
-      // Create story
-      await api.post('/stories', {
-        mediaUrl,
-        caption: caption.trim()
-      });
+      // Create story with authoritative server session
+      await createStory(mediaUrl, caption.trim());
 
       toast.success('Story posted successfully!');
       setCreateModalOpen(false);
       setSelectedFile(null);
       setPreviewUrl('');
       setCaption('');
-      fetchStories();
+      loadStories();
     } catch (err) {
       if (err.response?.status === 429) {
         const retrySecs = getRetryAfterSeconds(err, 15);
@@ -100,26 +170,56 @@ export default function StoriesTray() {
     }
   };
 
-  if (!stories.length && !user) return null;
+  // Open viewer for My Stories
+  const handleOpenMyStories = () => {
+    if (myStories.length > 0) {
+      const myGroup = [{
+        author: user,
+        stories: myStories
+      }];
+      setActiveViewerGroups(myGroup);
+      setInitialGroupIndex(0);
+      setViewerOpen(true);
+    } else {
+      setCreateModalOpen(true);
+    }
+  };
+
+  // Open viewer for another author's story group
+  const handleOpenAuthorStories = (targetGroupIndex) => {
+    setActiveViewerGroups(storyGroups);
+    setInitialGroupIndex(targetGroupIndex);
+    setViewerOpen(true);
+  };
+
+  if (!myStories.length && !storyGroups.length && !user) return null;
 
   return (
     <>
       <div className="w-full bg-[var(--ig-bg)] py-3 sm:py-4 border-b border-[var(--ig-border)] md:border md:rounded-xl md:mb-6 flex items-center gap-4 overflow-x-auto no-scrollbar select-none px-4">
-        {/* Current User Story */}
+        {/* Current User "Your Story" Circle */}
         {user && (
-          <div 
-            onClick={() => setCreateModalOpen(true)}
-            className="flex flex-col items-center gap-1.5 flex-shrink-0 cursor-pointer group"
-          >
+          <div className="flex flex-col items-center gap-1.5 flex-shrink-0 cursor-pointer group">
             <div className="relative">
-              <UserAvatar 
-                src={user?.avatar} 
-                name={user?.displayName || user?.username} 
-                size="lg"
-              />
-              <div className="absolute bottom-0 right-0 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[var(--ig-primary-button)] text-white flex items-center justify-center border-2 border-[var(--ig-bg)] group-hover:scale-110 transition-transform">
-                <Plus className="w-3 h-3 stroke-[3]" />
+              <div onClick={handleOpenMyStories}>
+                <UserAvatar 
+                  src={user?.avatar} 
+                  name={user?.displayName || user?.username} 
+                  size="lg"
+                  hasStory={myStories.length > 0}
+                  isStoryViewed={false}
+                />
               </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCreateModalOpen(true);
+                }}
+                className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-[var(--ig-primary-button)] text-white flex items-center justify-center border-2 border-[var(--ig-bg)] hover:scale-110 active:scale-95 transition-transform"
+                title="Add to story"
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+              </button>
             </div>
             <span className="text-[11px] text-[var(--ig-text-secondary)] max-w-[66px] truncate text-center">
               Your story
@@ -127,33 +227,39 @@ export default function StoriesTray() {
           </div>
         )}
 
-        {/* Other Users' Stories */}
-        {stories.map((storyGroup, idx) => (
-          <div 
-            key={storyGroup._id || idx}
-            onClick={() => setActiveStoryIndex(idx)}
-            className="flex flex-col items-center gap-1.5 flex-shrink-0 cursor-pointer group"
-          >
-            <UserAvatar 
-              src={storyGroup.author?.avatar}
-              name={storyGroup.author?.displayName || storyGroup.author?.username}
-              size="lg"
-              hasStory={true}
-              isStoryViewed={Boolean(storyGroup.viewed)}
-            />
-            <span className="text-[11px] text-[var(--ig-text-primary)] max-w-[66px] truncate text-center">
-              {storyGroup.author?.username || 'user'}
-            </span>
-          </div>
-        ))}
+        {/* Other Users' Story Circles (Grouped by Author) */}
+        {storyGroups.map((group, idx) => {
+          const author = group.author || {};
+          return (
+            <div 
+              key={author._id || idx}
+              onClick={() => handleOpenAuthorStories(idx)}
+              className="flex flex-col items-center gap-1.5 flex-shrink-0 cursor-pointer group"
+            >
+              <UserAvatar 
+                src={author.avatar}
+                name={author.displayName || author.username}
+                size="lg"
+                hasStory={true}
+                isStoryViewed={!group.hasUnviewed}
+              />
+              <span className="text-[11px] text-[var(--ig-text-primary)] max-w-[66px] truncate text-center">
+                {author.username || 'user'}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Fullscreen Story Viewer Modal */}
-      {activeStoryIndex !== null && stories[activeStoryIndex] && (
+      {/* Exactly ONE Fullscreen Story Viewer Modal Instance */}
+      {viewerOpen && activeViewerGroups.length > 0 && (
         <StoryViewerModal 
-          stories={stories}
-          initialIndex={activeStoryIndex}
-          onClose={() => setActiveStoryIndex(null)}
+          storyGroups={activeViewerGroups}
+          initialGroupIndex={initialGroupIndex}
+          onClose={() => setViewerOpen(false)}
+          onStoryDeleted={() => {
+            loadStories();
+          }}
         />
       )}
 
@@ -166,6 +272,7 @@ export default function StoriesTray() {
               setCreateModalOpen(false);
               setSelectedFile(null);
               setPreviewUrl('');
+              setCaption('');
             }
           }}
           title="Create Story"
@@ -220,7 +327,7 @@ export default function StoriesTray() {
               placeholder="Add a caption... (optional)"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
-              maxLength={150}
+              maxLength={200}
               className="w-full bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--text-primary)] rounded-lg px-3 py-2 outline-none focus:border-[var(--ig-primary-button)]"
             />
 

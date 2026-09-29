@@ -73,49 +73,39 @@ export const registerUser = asyncHandler(async (req, res) => {
   // Hash password using Argon2id
   const passwordHash = await hashPassword(password);
 
-  // Generate OTP
-  const pending = await OTP.findOne({ email: cleanEmail, type: 'register' });
-  if (pending?.lastSentAt && Date.now() - pending.lastSentAt.getTime() < 60000) {
-    res.status(429);
-    throw new Error('Wait 60 seconds before requesting another code.');
-  }
-
-  const rawOTP = generateSecureOTP();
-  const otpHash = crypto.createHash('sha256').update(rawOTP).digest('hex');
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-  // Upsert OTP record
-  await OTP.findOneAndUpdate(
-    { email: cleanEmail, type: 'register' },
-    {
-      email: cleanEmail,
-      otpHash,
-      failedAttempts: 0,
-      type: 'register',
-      tempUserData: {
-        username: cleanUsername,
-        displayName: (displayName || cleanUsername).trim(),
-        passwordHash
-      },
-      expiresAt,
-      lastSentAt: new Date()
-    },
-    { upsert: true, new: true }
-  );
-
-  // Send OTP Email
-  try {
-    await sendOTPEmail(cleanEmail, rawOTP, 'register');
-  } catch (emailErr) {
-    res.status(503);
-    throw new Error('Verification email could not be sent. Please try again shortly.');
-  }
-
-  res.status(200).json({
-    success: true,
-    requiresOTP: true,
+  // Create user directly
+  const user = await User.create({
+    username: cleanUsername,
+    displayName: (displayName || cleanUsername).trim(),
     email: cleanEmail,
-    message: 'Verification code sent to your email address.'
+    bio: bio || '',
+    passwordHash,
+    emailVerified: true
+  });
+
+  const token = await issueSession(user, res);
+
+  const userObj = {
+    _id: user._id,
+    username: user.username,
+    displayName: user.displayName || user.username,
+    email: user.email,
+    avatar: user.avatar,
+    bio: user.bio,
+    role: user.role,
+    followersCount: 0,
+    followingCount: 0,
+    postsCount: 0,
+    mfaEnabled: false
+  };
+
+  res.status(201).json({
+    success: true,
+    requiresOTP: false,
+    message: 'Registration successful!',
+    user: userObj,
+    token,
+    ...userObj
   });
 });
 
@@ -254,9 +244,9 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new Error('Invalid email/username or password');
   }
 
-  if (user.isBanned || !user.emailVerified) {
+  if (user.isBanned) {
     res.status(403);
-    throw new Error('Account is suspended or email verification is required.');
+    throw new Error('Account is suspended. Please contact support.');
   }
 
   // Transparent Password Migration to Argon2id

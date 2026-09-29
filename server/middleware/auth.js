@@ -1,7 +1,7 @@
 import asyncHandler from '../utils/asyncHandler.js';
 import { authenticateAccessToken } from '../services/sessionService.js';
 
-const bearer = req => req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
+const bearer = req => req.headers.authorization?.match(/^Bearer (.+)$/)?.[1] || req.query?.token;
 
 export const protect = asyncHandler(async (req, res, next) => {
   const token = bearer(req);

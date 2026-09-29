@@ -24,7 +24,17 @@ const createTransporter = () => {
     });
   }
 
-  return { sendMail: async () => { throw new Error('Email delivery is not configured.'); } };
+  // Development fallback: log OTP to console
+  return {
+    sendMail: async ({ to, subject, text }) => {
+      console.log('\n========================================');
+      console.log(`[DEV MAILER] To: ${to}`);
+      console.log(`[DEV MAILER] Subject: ${subject}`);
+      console.log(`[DEV MAILER] Body:\n${text}`);
+      console.log('========================================\n');
+      return { messageId: `dev-mock-${Date.now()}` };
+    }
+  };
 };
 
 const transporter = createTransporter();

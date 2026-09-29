@@ -46,9 +46,10 @@ test('API Routing & Reliability - Stories Endpoint', async (t) => {
     const res = await http.get('/api/stories');
     assert.equal(res.status, 200, 'GET /api/stories must return HTTP 200');
     const data = await res.json();
-    assert.ok(Array.isArray(data), 'Stories response must be an array');
-    assert.equal(data.length, 1);
-    assert.equal(data[0].caption, 'Sunset moment');
+    const storiesList = Array.isArray(data) ? data : data.stories;
+    assert.ok(Array.isArray(storiesList), 'Stories response must contain a stories array');
+    assert.equal(storiesList.length, 1);
+    assert.equal(storiesList[0].caption, 'Sunset moment');
   });
 
   await t.test('GET /api/stories returns empty array when no active stories', async () => {
@@ -62,8 +63,9 @@ test('API Routing & Reliability - Stories Endpoint', async (t) => {
     const res = await http.get('/api/stories');
     assert.equal(res.status, 200);
     const data = await res.json();
-    assert.ok(Array.isArray(data));
-    assert.equal(data.length, 0);
+    const storiesList = Array.isArray(data) ? data : data.stories;
+    assert.ok(Array.isArray(storiesList));
+    assert.equal(storiesList.length, 0);
   });
 });
 

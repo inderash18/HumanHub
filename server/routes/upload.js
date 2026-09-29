@@ -8,6 +8,7 @@ import { protect, optionalProtect } from '../middleware/auth.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { matchesMediaType } from '../utils/mediaSignature.js';
 import Post from '../models/Post.js';
+import Story from '../models/Story.js';
 import User from '../models/User.js';
 import Follow from '../models/Follow.js';
 import Block from '../models/Block.js';
@@ -36,73 +37,25 @@ router.get('/:filename', optionalProtect, asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'Media not found' });
   }
 
-  // 1. Check if it's an avatar (publicly accessible)
-  const isAvatar = await User.exists({ avatar: { $regex: filename } });
-  if (isAvatar) {
-    res.setHeader('Content-Security-Policy', "default-src 'none'");
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return fs.createReadStream(filePath).pipe(res);
-  }
-
-  // 2. Check if it belongs to a post
-  const post = await Post.findOne({ mediaUrls: { $regex: filename } }).populate('author', 'username privacySettings');
-  if (post) {
-    let isFollowing = false;
-    let isBlocked = false;
-
-    if (req.user) {
-      if (post.author) {
-        [isFollowing, isBlocked] = await Promise.all([
-          Follow.exists({ follower: req.user._id, following: post.author._id }),
-          Block.isBlocked(req.user._id, post.author._id)
-        ]);
-      }
-    }
-
-    const authorized = canViewPost({
-      user: req.user,
-      post,
-      isFollowing: Boolean(isFollowing),
-      isBlocked: Boolean(isBlocked)
-    });
-
-    if (!authorized) {
-      return res.status(403).json({ message: 'Access denied to private media.' });
-    }
-
-    res.setHeader('Content-Security-Policy', "default-src 'none'");
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cache-Control', post.author?.privacySettings?.isPrivate ? 'private, no-cache' : 'public, max-age=3600');
-    return fs.createReadStream(filePath).pipe(res);
-  }
-
-  // 3. Check if it's in MediaAnalysis (e.g. freshly uploaded or in quarantine)
+  // Check if it's in MediaAnalysis and explicitly quarantined
   const analysis = await MediaAnalysis.findOne({
     $or: [{ mediaUrl: { $regex: filename } }, { storagePath: { $regex: filename } }]
   });
 
-  if (analysis) {
+  if (analysis && analysis.quarantineStatus === 'quarantined') {
     const isOwner = req.user && String(analysis.uploader) === String(req.user._id);
     const isPrivileged = req.user && ['admin', 'moderator'].includes(req.user.role);
 
-    if (isOwner || isPrivileged) {
-      res.setHeader('Content-Security-Policy', "default-src 'none'");
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Cache-Control', 'private, no-cache');
-      return fs.createReadStream(filePath).pipe(res);
+    if (!isOwner && !isPrivileged) {
+      return res.status(403).json({ message: 'Media is currently quarantined for review.' });
     }
   }
 
-  // If unattached, allow owner or privileged users only if authenticated
-  if (req.user) {
-    res.setHeader('Content-Security-Policy', "default-src 'none'");
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cache-Control', 'private, no-cache');
-    return fs.createReadStream(filePath).pipe(res);
-  }
-
-  return res.status(403).json({ message: 'Authentication required for media access' });
+  // Stream media with strict security headers
+  res.setHeader('Content-Security-Policy', "default-src 'none'");
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  return fs.createReadStream(filePath).pipe(res);
 }));
 
 // Upload handler

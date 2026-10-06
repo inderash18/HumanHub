@@ -46,129 +46,117 @@ class C2PAVerifier:
 
     def verify(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> C2PAProvenanceResult:
         start_time = time.perf_counter()
-        
-        # 1. Quick check for C2PA marker (JUMBF box or C2PA header in byte stream)
-        # JUMBF UUID in JPEG/PNG/WebP: 'c2pa' or 'urn:uuid:64656c74-6174-696f-6e20-6d616e696665'
-        has_jumbf_signature = (
-            b"c2pa" in image_bytes[:65536] or 
-            b"jumd" in image_bytes[:65536] or
-            b"c2pa" in image_bytes[-65536:] or
-            b"C2PA" in image_bytes
-        )
 
-        if not has_jumbf_signature:
+        # 1. If official C2PA library is unavailable in runtime, report honest UNSUPPORTED state
+        if not self._c2pa_available:
+            return C2PAProvenanceResult(
+                status="UNSUPPORTED",
+                manifest_present=False,
+                validation_errors=["C2PA verification engine library (c2pa-python) is not available in runtime."],
+                latency_ms=round((time.perf_counter() - start_time) * 1000, 2)
+            )
+
+        # 2. Perform formal C2PA manifest parsing and cryptographic signature verification
+        try:
+            import c2pa
+            reader = c2pa.Reader.from_stream(mime_type, image_bytes)
+            manifest_json_str = reader.json()
+            manifest_data = json.loads(manifest_json_str)
+
+            active_manifest = manifest_data.get("active_manifest", {})
+            if not active_manifest:
+                return C2PAProvenanceResult(
+                    status="ABSENT",
+                    manifest_present=False,
+                    latency_ms=round((time.perf_counter() - start_time) * 1000, 2)
+                )
+
+            validation_status = manifest_data.get("validation_status", [])
+            
+            # Check validation errors
+            errors = []
+            for v in validation_status:
+                if v.get("code") and "error" in v.get("code", "").lower():
+                    errors.append(f"{v.get('code')}: {v.get('explanation', '')}")
+
+            signature_info = active_manifest.get("signature_info", {})
+            issuer = signature_info.get("issuer")
+            signer_name = signature_info.get("common_name")
+            
+            # Evaluation of assertions
+            assertions = active_manifest.get("assertions", [])
+            actions_list = []
+            is_ai_origin = False
+            is_ai_editing = False
+            is_camera = False
+            ai_tools = []
+
+            for assertion in assertions:
+                label = assertion.get("label", "")
+                data = assertion.get("data", {})
+                
+                if "c2pa.actions" in label:
+                    for act in data.get("actions", []):
+                        action_name = act.get("action", "")
+                        software = act.get("softwareAgent", "")
+                        actions_list.append({
+                            "action": action_name,
+                            "softwareAgent": software,
+                            "parameters": act.get("parameters")
+                        })
+                        # Check for AI generation action
+                        if action_name in ["c2pa.created", "c2pa.ai_generative", "c2pa.generated"]:
+                            is_ai_origin = True
+                            if software:
+                                ai_tools.append(software)
+                        elif action_name in ["c2pa.edited", "c2pa.filtered", "c2pa.placed"]:
+                            if "generative" in str(act).lower() or "ai" in str(act).lower():
+                                is_ai_editing = True
+
+                if "c2pa.ai_generative" in label or "generative-ai" in label.lower():
+                    is_ai_origin = True
+                    if data.get("generator"):
+                        ai_tools.append(data.get("generator"))
+
+                if "c2pa.camera" in label or "c2pa.sensor" in label:
+                    is_camera = True
+
+            signature_valid = len(errors) == 0
+            # Trust evaluation: trusted root certs or known certified issuers
+            trusted_issuers = ["Adobe", "Truepic", "Nikon", "Sony", "Leica", "OpenAI", "Microsoft", "Google", "C2PA", "Canon"]
+            signer_trusted = any(t.lower() in (issuer or signer_name or "").lower() for t in trusted_issuers)
+
+            status = "VALID_TRUSTED" if (signature_valid and signer_trusted) else (
+                "VALID_UNTRUSTED_SIGNER" if signature_valid else "INVALID"
+            )
+
+            return C2PAProvenanceResult(
+                status=status,
+                manifest_present=True,
+                signature_valid=signature_valid,
+                asset_binding_valid=signature_valid,
+                signer_trusted=signer_trusted,
+                signer_name=signer_name,
+                issuer=issuer,
+                claim_generator=active_manifest.get("claim_generator"),
+                is_ai_origin_asserted=is_ai_origin,
+                is_ai_editing_asserted=is_ai_editing,
+                is_camera_capture_asserted=is_camera,
+                ai_tools_mentioned=list(set(ai_tools)),
+                actions=actions_list,
+                validation_errors=errors,
+                raw_manifest_summary={
+                    "title": active_manifest.get("title"),
+                    "format": active_manifest.get("format"),
+                    "instance_id": active_manifest.get("instance_id")
+                },
+                latency_ms=round((time.perf_counter() - start_time) * 1000, 2)
+            )
+
+        except Exception as e:
+            logger.info("C2PA inspection: no valid manifest or parsing exception (%s)", e)
             return C2PAProvenanceResult(
                 status="ABSENT",
                 manifest_present=False,
                 latency_ms=round((time.perf_counter() - start_time) * 1000, 2)
             )
-
-        # 2. If c2pa library is available, perform formal validation
-        if self._c2pa_available:
-            try:
-                import c2pa
-                reader = c2pa.Reader.from_stream(mime_type, image_bytes)
-                manifest_json_str = reader.json()
-                manifest_data = json.loads(manifest_json_str)
-
-                active_manifest = manifest_data.get("active_manifest", {})
-                validation_status = manifest_data.get("validation_status", [])
-                
-                # Check validation errors
-                errors = []
-                for v in validation_status:
-                    if v.get("code") and "error" in v.get("code", "").lower():
-                        errors.append(f"{v.get('code')}: {v.get('explanation', '')}")
-
-                signature_info = active_manifest.get("signature_info", {})
-                issuer = signature_info.get("issuer")
-                signer_name = signature_info.get("common_name")
-                
-                # Evaluation of assertions
-                assertions = active_manifest.get("assertions", [])
-                actions_list = []
-                is_ai_origin = False
-                is_ai_editing = False
-                is_camera = False
-                ai_tools = []
-
-                for assertion in assertions:
-                    label = assertion.get("label", "")
-                    data = assertion.get("data", {})
-                    
-                    if "c2pa.actions" in label:
-                        for act in data.get("actions", []):
-                            action_name = act.get("action", "")
-                            software = act.get("softwareAgent", "")
-                            actions_list.append({
-                                "action": action_name,
-                                "softwareAgent": software,
-                                "parameters": act.get("parameters")
-                            })
-                            # Check for AI generation action
-                            if action_name in ["c2pa.created", "c2pa.ai_generative", "c2pa.generated"]:
-                                is_ai_origin = True
-                                if software:
-                                    ai_tools.append(software)
-                            elif action_name in ["c2pa.edited", "c2pa.filtered", "c2pa.placed"]:
-                                if "generative" in str(act).lower() or "ai" in str(act).lower():
-                                    is_ai_editing = True
-
-                    if "c2pa.ai_generative" in label or "generative-ai" in label.lower():
-                        is_ai_origin = True
-                        if data.get("prompt"):
-                            # Record presence without exposing raw prompt
-                            ai_tools.append(data.get("generator", "Generative AI Model"))
-
-                    if "c2pa.camera" in label or "c2pa.sensor" in label:
-                        is_camera = True
-
-                signature_valid = len(errors) == 0
-                # Trust evaluation: trusted root certs or known certified issuers
-                trusted_issuers = ["Adobe", "Truepic", "Nikon", "Sony", "Leica", "OpenAI", "Microsoft", "Google", "C2PA"]
-                signer_trusted = any(t.lower() in (issuer or signer_name or "").lower() for t in trusted_issuers)
-
-                status = "VALID_TRUSTED" if (signature_valid and signer_trusted) else (
-                    "VALID_UNTRUSTED_SIGNER" if signature_valid else "INVALID"
-                )
-
-                return C2PAProvenanceResult(
-                    status=status,
-                    manifest_present=True,
-                    signature_valid=signature_valid,
-                    asset_binding_valid=signature_valid,
-                    signer_trusted=signer_trusted,
-                    signer_name=signer_name,
-                    issuer=issuer,
-                    claim_generator=active_manifest.get("claim_generator"),
-                    is_ai_origin_asserted=is_ai_origin,
-                    is_ai_editing_asserted=is_ai_editing,
-                    is_camera_capture_asserted=is_camera,
-                    ai_tools_mentioned=list(set(ai_tools)),
-                    actions=actions_list,
-                    validation_errors=errors,
-                    raw_manifest_summary={
-                        "title": active_manifest.get("title"),
-                        "format": active_manifest.get("format"),
-                        "instance_id": active_manifest.get("instance_id")
-                    },
-                    latency_ms=round((time.perf_counter() - start_time) * 1000, 2)
-                )
-
-            except Exception as e:
-                logger.warning("C2PA parsing error: %s", e)
-                return C2PAProvenanceResult(
-                    status="UNSUPPORTED",
-                    manifest_present=True,
-                    validation_errors=[str(e)],
-                    latency_ms=round((time.perf_counter() - start_time) * 1000, 2)
-                )
-
-        # Fallback inspection if C2PA python binding is running without rust bridge
-        return C2PAProvenanceResult(
-            status="VALID_TRUSTED" if has_jumbf_signature else "ABSENT",
-            manifest_present=has_jumbf_signature,
-            signer_trusted=True if has_jumbf_signature else None,
-            signature_valid=True if has_jumbf_signature else None,
-            latency_ms=round((time.perf_counter() - start_time) * 1000, 2)
-        )

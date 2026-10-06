@@ -55,11 +55,12 @@ export default function PostDetailPage() {
   useEffect(() => {
     if (!socket) return;
     const handleAnalysisUpdate = (data) => {
-      if (data && post && Array.isArray(post.mediaAnalysis)) {
+      if (data && (data.mediaId || data.mediaUrl)) {
         setPost(prev => {
           if (!prev) return prev;
+          if (!Array.isArray(prev.mediaAnalysis)) return prev;
           const updatedAnalysis = prev.mediaAnalysis.map(a => 
-            a.mediaId === data.mediaId ? { ...a, ...data } : a
+            (a.mediaId === data.mediaId || (data.mediaUrl && a.mediaUrl === data.mediaUrl)) ? { ...a, ...data } : a
           );
           return { ...prev, mediaAnalysis: updatedAnalysis };
         });
@@ -69,7 +70,7 @@ export default function PostDetailPage() {
     return () => {
       socket.off('media:analysis:updated', handleAnalysisUpdate);
     };
-  }, [socket, post]);
+  }, [socket]);
 
   const fetchPost = async () => {
     try {

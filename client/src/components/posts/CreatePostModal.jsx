@@ -37,12 +37,17 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
   const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
 
   const fileInputRef = useRef(null);
+  const uploadSessionRef = useRef(0);
 
   useEffect(() => {
     if (isOpen) {
+      uploadSessionRef.current += 1;
       setStep(1);
       setMediaFiles([]);
-      setMediaPreviews([]);
+      setMediaPreviews(prev => {
+        prev.forEach(url => URL.revokeObjectURL(url));
+        return [];
+      });
       setUploadedMediaItems([]);
       setCaption('');
       api.get('/communities').then(res => {
@@ -55,9 +60,9 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
   useEffect(() => {
     if (!socket) return;
     const handleAnalysisUpdate = (data) => {
-      if (data && data.mediaId) {
+      if (data && (data.mediaId || data.mediaUrl)) {
         setUploadedMediaItems(prev => prev.map(item => 
-          item.mediaId === data.mediaId ? { ...item, ...data } : item
+          (item.mediaId === data.mediaId || item.url === data.mediaUrl) ? { ...item, ...data } : item
         ));
       }
     };
@@ -66,6 +71,32 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
       socket.off('media:analysis:updated', handleAnalysisUpdate);
     };
   }, [socket]);
+
+  // Fallback active polling while any item is QUEUED or RUNNING in composer
+  useEffect(() => {
+    const hasPending = uploadedMediaItems.some(
+      item => item.processingState === 'QUEUED' || item.processingState === 'RUNNING' || item.analysisOutcome === 'PENDING'
+    );
+    if (!hasPending) return;
+
+    const interval = setInterval(async () => {
+      for (const item of uploadedMediaItems) {
+        if (item.mediaId && (item.processingState === 'QUEUED' || item.processingState === 'RUNNING' || item.analysisOutcome === 'PENDING')) {
+          try {
+            const res = await api.get(`/v1/media/${item.mediaId}/analysis`);
+            if (res.data?.success && res.data.data) {
+              const latest = res.data.data;
+              if (latest.processingState === 'COMPLETED' || latest.processingState === 'FAILED') {
+                setUploadedMediaItems(prev => prev.map(p => p.mediaId === latest.mediaId ? { ...p, ...latest } : p));
+              }
+            }
+          } catch {}
+        }
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [uploadedMediaItems]);
 
   if (!isOpen) return null;
 
@@ -87,16 +118,21 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
     });
 
     if (validFiles.length > 0) {
+      const currentSession = ++uploadSessionRef.current;
+      setMediaPreviews(prev => {
+        prev.forEach(url => URL.revokeObjectURL(url));
+        return validPreviews;
+      });
       setMediaFiles(validFiles);
-      setMediaPreviews(validPreviews);
+      setUploadedMediaItems([]);
       setStep(2);
 
       // Immediately start background origin upload & analysis
-      uploadAndAnalyzeFiles(validFiles);
+      uploadAndAnalyzeFiles(validFiles, currentSession);
     }
   };
 
-  const uploadAndAnalyzeFiles = async (files) => {
+  const uploadAndAnalyzeFiles = async (files, sessionId) => {
     setIsUploading(true);
     const uploadedList = [];
 
@@ -111,6 +147,8 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
           headers: { 'Content-Type': 'multipart/form-data' }
         });
 
+        if (uploadSessionRef.current !== sessionId) return;
+
         if (res.data && res.data.success) {
           uploadedList.push({
             mediaId: res.data.mediaId,
@@ -123,6 +161,7 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
           });
         }
       } catch (err) {
+        if (uploadSessionRef.current !== sessionId) return;
         // Fallback to regular upload if analysis fails to queue
         try {
           const formData = new FormData();
@@ -142,8 +181,10 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
       }
     }
 
-    setUploadedMediaItems(uploadedList);
-    setIsUploading(false);
+    if (uploadSessionRef.current === sessionId) {
+      setUploadedMediaItems(uploadedList);
+      setIsUploading(false);
+    }
   };
 
   const handleDrop = (e) => {

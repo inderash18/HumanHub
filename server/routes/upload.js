@@ -37,13 +37,13 @@ router.get('/:filename', optionalProtect, asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'Media not found' });
   }
 
-  // Check if it's in MediaAnalysis and explicitly quarantined
+  // Check if it's in MediaAnalysis and explicitly quarantined (indexed lookup)
   const analysis = await MediaAnalysis.findOne({
-    $or: [{ mediaUrl: { $regex: filename } }, { storagePath: { $regex: filename } }]
-  });
+    mediaUrl: { $in: [`/api/uploads/${filename}`, `/uploads/${filename}`] }
+  }).select('owner processingState quarantineStatus').lean();
 
   if (analysis && analysis.quarantineStatus === 'quarantined') {
-    const isOwner = req.user && String(analysis.uploader) === String(req.user._id);
+    const isOwner = req.user && String(analysis.owner) === String(req.user._id);
     const isPrivileged = req.user && ['admin', 'moderator'].includes(req.user.role);
 
     if (!isOwner && !isPrivileged) {
@@ -51,10 +51,10 @@ router.get('/:filename', optionalProtect, asyncHandler(async (req, res) => {
     }
   }
 
-  // Stream media with strict security headers
+  // Stream media with high-speed caching headers
   res.setHeader('Content-Security-Policy', "default-src 'none'");
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
   return fs.createReadStream(filePath).pipe(res);
 }));
 

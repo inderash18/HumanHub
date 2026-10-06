@@ -50,11 +50,31 @@ class UniversalFakeDetectAdapter(BaseDetector):
         return h.hexdigest()
 
     def _preprocess_image(self, image: Image.Image):
-        """Standard CLIP preprocessing matching ViT-L/14."""
+        """Standard CLIP preprocessing matching ViT-L/14 with EXIF orientation handling."""
         import torch
-        image = image.convert("RGB").resize((224, 224), Image.BICUBIC)
-        # Convert to tensor [3, 224, 224] in [0.0, 1.0]
+        from PIL import ImageOps
         import numpy as np
+
+        # 1. Correct EXIF orientation so rotated camera photos match true visual orientation
+        try:
+            image = ImageOps.exif_transpose(image)
+        except Exception:
+            pass
+
+        # 2. Convert to RGB, handling transparency and palette modes cleanly
+        if image.mode in ("RGBA", "LA", "P"):
+            background = Image.new("RGB", image.size, (255, 255, 255))
+            if image.mode == "P":
+                image = image.convert("RGBA")
+            background.paste(image, mask=image.split()[-1] if "A" in image.mode else None)
+            image = background
+        elif image.mode != "RGB":
+            image = image.convert("RGB")
+
+        # 3. Standard CLIP ViT-L/14 bicubic resize to 224x224
+        image = image.resize((224, 224), Image.BICUBIC)
+
+        # 4. Convert to tensor [3, 224, 224] normalized with standard OpenAI CLIP statistics
         arr = np.array(image, dtype=np.float32) / 255.0
         tensor = torch.from_numpy(arr).permute(2, 0, 1)
         mean = torch.tensor([0.48145466, 0.4578275, 0.40821073]).view(3, 1, 1)
@@ -63,13 +83,13 @@ class UniversalFakeDetectAdapter(BaseDetector):
         return normalized.unsqueeze(0).to(self.device)
 
     def load_model(self) -> bool:
-        """Load CLIP ViT-L/14 backbone and linear probe classification head."""
+        """Load CLIP ViT-L/14 backbone and linear probe classification head without fabricating dummy models."""
         try:
             import torch
             import torch.nn as nn
 
             if not os.path.exists(self.checkpoint_path):
-                self._load_error = f"Checkpoint file not found at {self.checkpoint_path}. Run setup_weights.py to install."
+                self._load_error = f"Checkpoint file not found at {self.checkpoint_path}. Detection marked as unavailable."
                 logger.warning(self._load_error)
                 self._is_ready = False
                 return False
@@ -102,30 +122,54 @@ class UniversalFakeDetectAdapter(BaseDetector):
             self.fc_head.eval()
 
             # Attempt to load CLIP vision backbone
+            self.clip_model = None
+            local_clip_dir = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "clip-vit-large-patch14")
+            if os.path.exists(os.path.join(local_clip_dir, "model.safetensors")):
+                clip_model_path = local_clip_dir
+            else:
+                clip_model_path = os.getenv("CLIP_MODEL_PATH", "openai/clip-vit-large-patch14")
+
             try:
                 import open_clip
                 model, _, _ = open_clip.create_model_and_transforms('ViT-L-14', pretrained='openai')
                 self.clip_model = model.visual.to(self.device)
                 self.clip_model.eval()
-            except Exception as e:
-                logger.info(f"open_clip unavailable, trying transformers: {e}")
+                self._is_ready = True
+                logger.info("UniversalFakeDetect loaded successfully with open_clip on %s", self.device)
+                return True
+            except Exception as e_openclip:
+                logger.info("open_clip not available (%s), trying transformers...", e_openclip)
                 try:
                     from transformers import CLIPVisionModelWithProjection
-                    self.clip_model = CLIPVisionModelWithProjection.from_pretrained("openai/clip-vit-large-patch14").to(self.device)
-                    self.clip_model.eval()
-                except Exception as ex:
-                    logger.info(f"Transformers CLIP fallback: using PyTorch embedding projector ({ex})")
-                    # Fallback linear embedding extractor
-                    self.clip_model = nn.Sequential(
-                        nn.AdaptiveAvgPool2d((1, 1)),
-                        nn.Flatten(),
-                        nn.Linear(3, in_features)
-                    ).to(self.device)
-                    self.clip_model.eval()
+                    # Check local files first to avoid blocking unauthenticated network requests
+                    try:
+                        self.clip_model = CLIPVisionModelWithProjection.from_pretrained(
+                            clip_model_path,
+                            local_files_only=True
+                        ).to(self.device)
+                    except Exception as e_local:
+                        if os.getenv("TRANSFORMERS_OFFLINE", "1") == "1" or os.getenv("HF_HUB_OFFLINE", "1") == "1":
+                            raise e_local
+                        try:
+                            self.clip_model = CLIPVisionModelWithProjection.from_pretrained(
+                                clip_model_path
+                            ).to(self.device)
+                        except Exception as e_remote:
+                            raise e_remote
 
-            self._is_ready = True
-            logger.info("UniversalFakeDetect loaded successfully on %s", self.device)
-            return True
+                    self.clip_model.eval()
+                    self._is_ready = True
+                    logger.info("UniversalFakeDetect loaded successfully with transformers on %s", self.device)
+                    return True
+                except Exception as e_transformers:
+                    self.clip_model = None
+                    self._load_error = (
+                        f"CLIP ViT-L/14 vision backbone could not be loaded (open_clip: {e_openclip}; "
+                        f"transformers: {e_transformers}). Automated pixel model is unavailable."
+                    )
+                    logger.warning(self._load_error)
+                    self._is_ready = False
+                    return False
 
         except Exception as e:
             self._load_error = f"Failed to initialize UniversalFakeDetect: {str(e)}"
@@ -136,7 +180,7 @@ class UniversalFakeDetectAdapter(BaseDetector):
     def predict(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> DetectorResult:
         start_time = time.perf_counter()
 
-        if not self._is_ready:
+        if not self._is_ready or self.clip_model is None or self.fc_head is None:
             return DetectorResult(
                 model_name=self.model_name,
                 version=self.version,
@@ -145,20 +189,21 @@ class UniversalFakeDetectAdapter(BaseDetector):
                 preprocessing_version=self.preprocessing_version,
                 device=self.device,
                 status="UNAVAILABLE",
-                error_message=self._load_error or "Model weights not initialized. Never substituting fake results.",
+                error_message=self._load_error or "Model backbone or weights not loaded. Honest unavailable state returned.",
                 latency_ms=(time.perf_counter() - start_time) * 1000
             )
 
         try:
             import torch
-            image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+            image = Image.open(io.BytesIO(image_bytes))
             tensor = self._preprocess_image(image)
 
             with torch.no_grad():
-                if hasattr(self.clip_model, "forward"):
-                    feats = self.clip_model(tensor)
-                    if hasattr(feats, "image_embeds"):
-                        feats = feats.image_embeds
+                if hasattr(self.clip_model, "encode_image"):
+                    feats = self.clip_model.encode_image(tensor)
+                elif hasattr(self.clip_model, "forward"):
+                    out = self.clip_model(tensor)
+                    feats = out.image_embeds if hasattr(out, "image_embeds") else out
                 else:
                     feats = self.clip_model(tensor)
 
@@ -167,11 +212,42 @@ class UniversalFakeDetectAdapter(BaseDetector):
                 if feats.dim() == 1:
                     feats = feats.unsqueeze(0)
 
+                # UnivFD requires L2-normalized feature embeddings before linear classification
+                feats = feats / feats.norm(dim=-1, keepdim=True)
+
                 # Linear head inference
                 logit_tensor = self.fc_head(feats)
+
+                # Reject non-finite values (NaN / Inf)
+                if torch.isnan(logit_tensor).any() or torch.isinf(logit_tensor).any():
+                    return DetectorResult(
+                        model_name=self.model_name,
+                        version=self.version,
+                        checkpoint_identifier=self.checkpoint_identifier,
+                        checkpoint_sha256=self.actual_sha256,
+                        preprocessing_version=self.preprocessing_version,
+                        device=self.device,
+                        status="FAILED",
+                        error_message="Model returned non-finite logit values (NaN/Inf).",
+                        latency_ms=(time.perf_counter() - start_time) * 1000
+                    )
+
                 logit_val = float(logit_tensor.squeeze().item())
-                # Sigmoid activation: score near 1.0 indicates synthetic/fake
                 score_val = float(torch.sigmoid(logit_tensor).squeeze().item())
+
+                # Validate score range
+                if not (0.0 <= score_val <= 1.0):
+                    return DetectorResult(
+                        model_name=self.model_name,
+                        version=self.version,
+                        checkpoint_identifier=self.checkpoint_identifier,
+                        checkpoint_sha256=self.actual_sha256,
+                        preprocessing_version=self.preprocessing_version,
+                        device=self.device,
+                        status="FAILED",
+                        error_message=f"Model score {score_val} is outside [0.0, 1.0].",
+                        latency_ms=(time.perf_counter() - start_time) * 1000
+                    )
 
             latency = (time.perf_counter() - start_time) * 1000
 
@@ -190,7 +266,8 @@ class UniversalFakeDetectAdapter(BaseDetector):
                 status="COMPLETED",
                 details={
                     "resolution": f"{image.width}x{image.height}",
-                    "eval_mode": True
+                    "eval_mode": True,
+                    "normalized_features": True
                 }
             )
 

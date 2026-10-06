@@ -133,17 +133,28 @@ class MetadataExtractor:
                             result.has_ai_generation_parameters = True
                             break
 
-                # Check for SD / NovelAI parameters
-                if "parameters" in info or "prompt" in info or "workflow" in info:
-                    result.has_ai_generation_parameters = True
-                    if not result.ai_generation_software_detected:
-                        result.ai_generation_software_detected = "Generative AI Tool (Parameters Found)"
+                # Check for SD / ComfyUI / NovelAI parameter blocks specifically
+                for key in ("parameters", "prompt", "workflow", "Comment", "Description"):
+                    if key in info and isinstance(info[key], str):
+                        val = info[key]
+                        # Look for definitive generative parameter signatures
+                        if (
+                            "Steps:" in val and "Sampler:" in val
+                        ) or (
+                            "CFG scale:" in val and "Seed:" in val
+                        ) or (
+                            '"KSampler"' in val or '"CheckpointLoaderSimple"' in val
+                        ):
+                            result.has_ai_generation_parameters = True
+                            if not result.ai_generation_software_detected:
+                                result.ai_generation_software_detected = "Generative AI Tool (Parameters Header)"
+                            break
 
                 # Check software tag in info
                 if "Software" in info and isinstance(info["Software"], str) and not result.software:
                     result.software = info["Software"][:128]
 
-            # 3. Check software string against AI signatures
+            # 3. Check software string against known AI software signatures
             if result.software and not result.ai_generation_software_detected:
                 for pattern, label in self.AI_SOFTWARE_SIGNATURES:
                     if pattern.search(result.software):

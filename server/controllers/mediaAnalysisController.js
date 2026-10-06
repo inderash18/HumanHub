@@ -77,7 +77,7 @@ export const uploadMediaAndEnqueueAnalysis = asyncHandler(async (req, res) => {
     }
   });
 
-  // 4. Enqueue into Redis for async analysis
+  // 4. Enqueue into Redis for async analysis and trigger immediate worker tick
   try {
     await redis.lpush(QUEUE_KEY, JSON.stringify({
       id: String(analysis._id),
@@ -87,6 +87,13 @@ export const uploadMediaAndEnqueueAnalysis = asyncHandler(async (req, res) => {
   } catch (err) {
     console.error('[MediaAnalysis] Redis enqueue failed:', err.message);
   }
+
+  // Trigger worker processing immediately (handles both Redis and DB fallback)
+  setImmediate(() => {
+    import('../workers/mediaAnalysisWorker.js')
+      .then(m => m.processAnalysisJob())
+      .catch(e => console.error('[MediaAnalysis] Immediate processing error:', e.message));
+  });
 
   res.status(201).json({
     success: true,
@@ -161,6 +168,7 @@ export const getMediaAnalysis = asyncHandler(async (req, res) => {
       dimensions: analysis.dimensions,
       detector: analysis.detector,
       retryCount: analysis.retryCount,
+      errorCode: analysis.errorCode,
       error: analysis.error,
       reviewDetails: analysis.reviewRequest
     };
@@ -188,7 +196,9 @@ export const retryMediaAnalysis = asyncHandler(async (req, res) => {
 
   analysis.processingState = 'QUEUED';
   analysis.analysisOutcome = 'PENDING';
+  analysis.policyVersion = '2026.2';
   analysis.retryCount = 0;
+  analysis.errorCode = '';
   analysis.error = '';
   analysis.evidence = {
     badgeLabel: 'Checking image...',
@@ -199,11 +209,22 @@ export const retryMediaAnalysis = asyncHandler(async (req, res) => {
   };
   await analysis.save();
 
-  await redis.lpush(QUEUE_KEY, JSON.stringify({
-    id: String(analysis._id),
-    mediaId: analysis.mediaId,
-    mediaVersion: analysis.mediaVersion
-  }));
+  try {
+    await redis.lpush(QUEUE_KEY, JSON.stringify({
+      id: String(analysis._id),
+      mediaId: analysis.mediaId,
+      mediaVersion: analysis.mediaVersion
+    }));
+  } catch (err) {
+    console.error('[MediaAnalysis] Redis retry enqueue failed:', err.message);
+  }
+
+  // Trigger worker processing immediately
+  setImmediate(() => {
+    import('../workers/mediaAnalysisWorker.js')
+      .then(m => m.processAnalysisJob())
+      .catch(e => console.error('[MediaAnalysis] Immediate retry processing error:', e.message));
+  });
 
   res.json({ success: true, message: 'Analysis re-enqueued successfully', processingState: 'QUEUED' });
 });

@@ -59,3 +59,28 @@ test('MediaAnalysis records dispute review requests accurately', () => {
   assert.equal(analysis.reviewRequest.status, 'pending');
   assert.match(analysis.reviewRequest.reason, /Sony A7IV/);
 });
+
+test('MediaAnalysis supports LIKELY_AUTHENTIC and CHECK_UNAVAILABLE outcomes', () => {
+  const authenticAnalysis = new MediaAnalysis({
+    mediaId: 'test-media-auth',
+    owner: '657000000000000000000001',
+    mediaUrl: '/api/uploads/auth.jpg',
+    originalPath: '/tmp/auth.jpg',
+    fileHash: '1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff',
+    analysisOutcome: 'LIKELY_AUTHENTIC',
+    processingState: 'COMPLETED'
+  });
+  assert.equal(authenticAnalysis.analysisOutcome, 'LIKELY_AUTHENTIC');
+
+  const unavailableAnalysis = new MediaAnalysis({
+    mediaId: 'test-media-unavail',
+    owner: '657000000000000000000001',
+    mediaUrl: '/api/uploads/unavail.jpg',
+    originalPath: '/tmp/unavail.jpg',
+    fileHash: '2222333344445555666677778888999900001111aaaabbbbccccddddeeeeffff',
+    analysisOutcome: 'CHECK_UNAVAILABLE',
+    processingState: 'FAILED'
+  });
+  assert.equal(unavailableAnalysis.analysisOutcome, 'CHECK_UNAVAILABLE');
+  assert.equal(unavailableAnalysis.processingState, 'FAILED');
+});

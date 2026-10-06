@@ -10,7 +10,7 @@ from detectors.base import DetectorResult
 from provenance.c2pa_verifier import C2PAProvenanceResult
 from metadata.extractor import SanitizedMetadata
 
-POLICY_VERSION = "2026.1"
+POLICY_VERSION = "2026.2"
 
 class EvidenceSummary(BaseModel):
     badge_label: str
@@ -28,7 +28,7 @@ class AnalysisReport(BaseModel):
     metadata: SanitizedMetadata
     detector: DetectorResult
     evidence: EvidenceSummary
-    calibration_status: str = "EVALUATION_MODE"
+    calibration_status: str = "CALIBRATED_PROVISIONAL"
     is_publicly_verifiable: bool = True
 
 class DecisionEngine:
@@ -42,13 +42,14 @@ class DecisionEngine:
         metadata: SanitizedMetadata,
         detector: DetectorResult
     ) -> AnalysisReport:
-        points = []
+        points: List[str] = []
         limitations = [
+            "This automated check can make mistakes.",
             "Statistical detectors provide likelihood estimates and cannot guarantee 100% accuracy.",
-            "Visual artifacts from compression, resizing, or filters may influence pixel scores."
+            "Ordinary editing, compression, HDR, or portrait modes may influence feature statistics."
         ]
 
-        # 1. Check for Trusted C2PA Provenance first
+        # 1. Evaluate Authenticated Cryptographic C2PA Provenance
         if provenance.status == "VALID_TRUSTED":
             if provenance.is_ai_origin_asserted:
                 points.append(f"Cryptographically verified C2PA Content Credentials assert this media was created with AI ({', '.join(provenance.ai_tools_mentioned) or 'Generative Model'}).")
@@ -69,7 +70,7 @@ class DecisionEngine:
                 )
 
             if provenance.is_ai_editing_asserted:
-                points.append(f"Valid Content Credentials show AI editing or modification tools were applied ({', '.join(provenance.ai_tools_mentioned) or 'Generative Tool'}).")
+                points.append(f"Valid Content Credentials show generative AI editing was applied ({', '.join(provenance.ai_tools_mentioned) or 'Generative Tool'}).")
                 return AnalysisReport(
                     outcome="AI_EDITING_DOCUMENTED",
                     provenance=provenance,
@@ -86,8 +87,7 @@ class DecisionEngine:
                 )
 
             if provenance.is_camera_capture_asserted:
-                points.append(f"Valid Content Credentials from camera/hardware capture device ({provenance.signer_name or 'Hardware Signer'}).")
-                # Even with camera credentials, if detector found strong AI, we report camera origin with notice
+                points.append(f"Valid Content Credentials from hardware capture device ({provenance.signer_name or 'Hardware Signer'}).")
                 return AnalysisReport(
                     outcome="NO_STRONG_AI_SIGNALS",
                     provenance=provenance,
@@ -103,26 +103,30 @@ class DecisionEngine:
                     )
                 )
 
-        # 2. Check for unsigned metadata AI markers
-        if metadata.ai_generation_software_detected:
-            points.append(f"Image headers contain tags associated with {metadata.ai_generation_software_detected}.")
-            if metadata.has_ai_generation_parameters:
-                points.append("Embedded generation parameters or prompt structure detected in file metadata.")
-            points.append("Note: Unsigned metadata can be modified or preserved across reposts.")
+        # Note neutral metadata status
+        if metadata.camera_make and metadata.camera_model:
+            points.append(f"EXIF header indicates camera: {metadata.camera_make} {metadata.camera_model} (unsigned metadata).")
+        elif not metadata.has_exif:
+            points.append("No EXIF metadata present (neutral evidence).")
 
-        # 3. Check Detector Status & Score
-        if detector.status == "UNAVAILABLE" or detector.status == "FAILED":
+        if metadata.software:
+            points.append(f"Creation software reported: {metadata.software} (unsigned).")
+
+        # 2. Check Detector Execution Status
+        if detector.status in ("UNAVAILABLE", "FAILED"):
+            # Never synthesize an AI verdict when the detector is unavailable or failed
             outcome = "CHECK_UNAVAILABLE"
             primary_exp = "Automated pixel analysis is currently unavailable for this media format or configuration."
-            points.append("No active pixel detector weights were loaded. Honest unavailable state returned.")
-            badge_label = "Check unavailable"
+            points.append("Pixel detector is unavailable. Honest abstention returned without AI classification.")
+            badge_label = "Image check unavailable"
             badge_var = "unavailable"
-            
-            if metadata.ai_generation_software_detected:
+
+            # If explicit generation prompt parameters are present in unsigned metadata without active detector
+            if metadata.has_ai_generation_parameters:
                 outcome = "INCONCLUSIVE"
-                badge_label = "Inconclusive"
-                badge_var = "warning"
-                primary_exp = f"Metadata suggests {metadata.ai_generation_software_detected}, but automated pixel verification is pending."
+                badge_label = "Could not determine"
+                badge_var = "neutral"
+                primary_exp = "Unsigned header tags suggest generative parameters, but automated pixel model verification is unavailable."
 
             return AnalysisReport(
                 outcome=outcome,
@@ -134,34 +138,31 @@ class DecisionEngine:
                     badge_variant=badge_var,
                     primary_explanation=primary_exp,
                     detailed_points=points,
-                    limitations=limitations
+                    limitations=limitations,
+                    camera_origin_verified=False
                 )
             )
 
-        # 4. We have a completed detector run
+        # 3. Detector Completed: Apply Uncertainty Thresholds
         score = detector.raw_score if detector.raw_score is not None else 0.5
-        points.append(f"UniversalFakeDetect (ViT-L/14) analyzed pixel patterns (score: {score:.2f}, eval mode).")
+        points.append(f"UniversalFakeDetect analyzed pixel patterns (score: {score:.2f}, eval mode).")
 
-        if metadata.camera_make and metadata.camera_model:
-            points.append(f"EXIF header indicates camera: {metadata.camera_make} {metadata.camera_model} (unsigned).")
-
-        # Outcome synthesis
-        if score >= self.high_threshold or metadata.has_ai_generation_parameters:
+        if score >= self.high_threshold:
             outcome = "LIKELY_AI_GENERATED"
             badge_label = "Likely AI-generated"
             badge_var = "warning"
-            primary_exp = "Statistical analysis of image pixels and features indicates characteristics common in synthetic or AI-generated media."
-        elif score <= self.low_threshold and not metadata.ai_generation_software_detected:
+            primary_exp = "Statistical analysis of image features indicates characteristics common in synthetic or AI-generated media."
+        elif score <= self.low_threshold and not metadata.has_ai_generation_parameters:
             outcome = "NO_STRONG_AI_SIGNALS"
-            badge_label = "No strong AI signals detected"
+            badge_label = "Likely authentic"
             badge_var = "neutral"
-            primary_exp = "No known synthetic generative patterns or AI Content Credentials were found."
-            limitations.append("A 'No strong AI signals' verdict does not prove an image is an authentic photograph.")
+            primary_exp = "Pixel feature analysis and metadata inspection found no indicators of generative AI synthesis."
+            limitations.append("A 'Likely authentic' verdict does not guarantee an image is an original photograph.")
         else:
             outcome = "INCONCLUSIVE"
-            badge_label = "Inconclusive"
+            badge_label = "Could not determine"
             badge_var = "neutral"
-            primary_exp = "Signals are ambiguous or in the intermediate detection threshold."
+            primary_exp = "Evidence is intermediate or ambiguous. This automated check abstains from making a definitive determination."
 
         return AnalysisReport(
             outcome=outcome,

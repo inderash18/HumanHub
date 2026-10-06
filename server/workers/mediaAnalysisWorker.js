@@ -18,7 +18,18 @@ export async function processAnalysisJob() {
     rawJob = await redis.rpop(QUEUE_KEY);
   } catch (err) {
     console.error('[MediaAnalysisWorker] Redis connection issue:', err.message);
-    return;
+  }
+
+  // Fallback: Check MongoDB directly if Redis had no job
+  if (!rawJob) {
+    try {
+      const pendingDoc = await MediaAnalysis.findOne({ processingState: 'QUEUED' }).sort({ createdAt: 1 });
+      if (pendingDoc) {
+        rawJob = JSON.stringify({ id: String(pendingDoc._id), mediaId: pendingDoc.mediaId, mediaVersion: pendingDoc.mediaVersion });
+      }
+    } catch (dbErr) {
+      // Ignore DB read errors
+    }
   }
 
   if (!rawJob) return;
@@ -66,7 +77,9 @@ export async function processAnalysisJob() {
     // Map response to MediaAnalysis fields
     analysis.processingState = 'COMPLETED';
     analysis.analysisOutcome = report.outcome || 'INCONCLUSIVE';
-    analysis.policyVersion = report.policy_version || '2026.1';
+    analysis.policyVersion = report.policy_version || '2026.2';
+    analysis.errorCode = '';
+    analysis.error = '';
 
     if (report.provenance) {
       analysis.provenance = {
@@ -124,6 +137,9 @@ export async function processAnalysisJob() {
         errorMessage: report.detector.error_message,
         details: report.detector.details || {}
       };
+      if (report.detector.status === 'UNAVAILABLE') {
+        analysis.errorCode = 'MODEL_NOT_READY';
+      }
     }
 
     if (report.evidence) {
@@ -145,8 +161,11 @@ export async function processAnalysisJob() {
       const payload = {
         mediaId: analysis.mediaId,
         mediaVersion: analysis.mediaVersion,
+        mediaUrl: analysis.mediaUrl,
         processingState: analysis.processingState,
         analysisOutcome: analysis.analysisOutcome,
+        policyVersion: analysis.policyVersion,
+        errorCode: analysis.errorCode,
         evidence: analysis.evidence,
         provenanceStatus: analysis.provenance?.status,
         metadata: {
@@ -160,10 +179,33 @@ export async function processAnalysisJob() {
       io.emit('media:analysis:updated', payload);
     }
 
-    console.log(`[MediaAnalysisWorker] Job completed for media ${analysis.mediaId} -> Outcome: ${analysis.analysisOutcome}`);
+    console.log(`[MediaAnalysisWorker] Job completed for media ${analysis.mediaId} -> Outcome: ${analysis.analysisOutcome} (Policy: ${analysis.policyVersion})`);
 
   } catch (error) {
-    console.error(`[MediaAnalysisWorker] Error processing job:`, error.message);
+    let errorCode = 'INFERENCE_FAILED';
+    let safeMessage = 'Automated analysis could not be completed at this time.';
+    let detailPoint = 'An internal processing error occurred.';
+
+    if (error.code === 'ENOENT' || error.message?.includes('not found at')) {
+      errorCode = 'IMAGE_FETCH_FAILED';
+      safeMessage = 'The uploaded media file could not be accessed from storage.';
+      detailPoint = 'Image file was unavailable for analysis.';
+    } else if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'EHOSTUNREACH' || error.message?.includes('ECONNREFUSED')) {
+      errorCode = 'SERVICE_UNREACHABLE';
+      safeMessage = 'Origin verification service is temporarily unreachable.';
+      detailPoint = 'AI analysis service connection could not be established.';
+    } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout') || error.message?.includes('timed out')) {
+      errorCode = 'INFERENCE_TIMEOUT';
+      safeMessage = 'Inference request timed out during model execution.';
+      detailPoint = 'Analysis exceeded the execution time limit.';
+    } else if (error.response?.status === 503 || error.message?.includes('MODEL_NOT_READY')) {
+      errorCode = 'MODEL_NOT_READY';
+      safeMessage = 'Analysis models are currently initializing.';
+      detailPoint = 'Model weights or backbone components are loading.';
+    }
+
+    console.error(`[MediaAnalysisWorker] Error [${errorCode}] processing job:`, error.message);
+
     if (jobId) {
       const analysis = await MediaAnalysis.findById(jobId);
       if (analysis) {
@@ -171,12 +213,14 @@ export async function processAnalysisJob() {
         if (analysis.retryCount >= MAX_RETRIES) {
           analysis.processingState = 'FAILED';
           analysis.analysisOutcome = 'CHECK_UNAVAILABLE';
+          analysis.policyVersion = '2026.2';
+          analysis.errorCode = errorCode;
           analysis.error = error.message;
           analysis.evidence = {
-            badgeLabel: 'Check unavailable',
+            badgeLabel: 'Image check unavailable',
             badgeVariant: 'unavailable',
-            primaryExplanation: 'Automated analysis could not be completed at this time.',
-            detailedPoints: ['Inference request timed out or worker encountered an internal error.'],
+            primaryExplanation: safeMessage,
+            detailedPoints: [detailPoint],
             limitations: ['Verification may be retried by the post author.']
           };
           await analysis.save();
@@ -186,8 +230,11 @@ export async function processAnalysisJob() {
             io.emit('media:analysis:updated', {
               mediaId: analysis.mediaId,
               mediaVersion: analysis.mediaVersion,
+              mediaUrl: analysis.mediaUrl,
               processingState: 'FAILED',
               analysisOutcome: 'CHECK_UNAVAILABLE',
+              policyVersion: analysis.policyVersion,
+              errorCode: analysis.errorCode,
               evidence: analysis.evidence
             });
           }

@@ -56,11 +56,13 @@ export const getUserProfile = asyncHandler(async (req, res) => {
   let totalPosts = 0;
 
   if (canSeePosts) {
+    const postQuery = Post.find({ author: user._id, status: 'published' })
+      .populate('community', 'name slug icon')
+      .sort({ createdAt: -1 })
+      .limit(30);
+
     const [posts, count] = await Promise.all([
-      Post.find({ author: user._id, status: 'published' })
-        .populate('community', 'name slug icon')
-        .sort({ createdAt: -1 })
-        .limit(30),
+      typeof postQuery.lean === 'function' ? postQuery.lean() : postQuery,
       Post.countDocuments({ author: user._id, status: 'published' })
     ]);
     totalPosts = count;
@@ -71,15 +73,15 @@ export const getUserProfile = asyncHandler(async (req, res) => {
     if (req.user && posts.length > 0) {
       const postIds = posts.map(p => p._id);
       const [likes, saves] = await Promise.all([
-        Like.find({ user: req.user._id, post: { $in: postIds } }),
-        SavedPost.find({ user: req.user._id, post: { $in: postIds } })
+        Like.find({ user: req.user._id, post: { $in: postIds } }).lean(),
+        SavedPost.find({ user: req.user._id, post: { $in: postIds } }).lean()
       ]);
       likes.forEach(l => likedPostIds.add(l.post.toString()));
       saves.forEach(s => savedPostIds.add(s.post.toString()));
     }
 
     formattedPosts = posts.map(p => {
-      const postObj = p.toObject();
+      const postObj = p.toObject ? p.toObject() : p;
       const idStr = p._id.toString();
       return {
         ...postObj,

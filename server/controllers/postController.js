@@ -53,19 +53,19 @@ export const createPost = asyncHandler(async (req, res) => {
     mediaType = isVideo ? 'video' : 'image';
   }
 
-  // Find associated MediaAnalysis records if mediaIds or mediaUrls provided (ensuring uploader ownership)
+  // Find associated MediaAnalysis records if mediaIds or mediaUrls provided (ensuring owner authorization)
   let analysisDocIds = [];
   if (Array.isArray(mediaIds) && mediaIds.length > 0) {
     const validMediaIds = mediaIds.filter(id => typeof id === 'string' && /^[a-zA-Z0-9_\-\.]+$/.test(id));
     const analysisDocs = await MediaAnalysis.find({
       mediaId: { $in: validMediaIds },
-      $or: [{ uploader: req.user._id }, { uploader: null }]
+      $or: [{ owner: req.user._id }, { owner: null }]
     });
     analysisDocIds = analysisDocs.map(d => d._id);
   } else if (mediaList.length > 0) {
     const analysisDocs = await MediaAnalysis.find({
       mediaUrl: { $in: mediaList },
-      $or: [{ uploader: req.user._id }, { uploader: null }]
+      $or: [{ owner: req.user._id }, { owner: null }]
     });
     analysisDocIds = analysisDocs.map(d => d._id);
   }
@@ -93,7 +93,7 @@ export const createPost = asyncHandler(async (req, res) => {
   if (analysisDocIds.length > 0) {
     await MediaAnalysis.updateMany(
       { _id: { $in: analysisDocIds } },
-      { $set: { post: post._id, uploader: req.user._id } }
+      { $set: { post: post._id, owner: req.user._id } }
     );
   }
 
@@ -143,8 +143,8 @@ export const getPosts = asyncHandler(async (req, res) => {
   let followingSet = new Set();
   if (req.user) {
     const [blockedRecords, followingRecords] = await Promise.all([
-      Block.find({ $or: [{ blocker: req.user._id }, { blocked: req.user._id }] }),
-      Follow.find({ follower: req.user._id }).select('following')
+      Block.find({ $or: [{ blocker: req.user._id }, { blocked: req.user._id }] }).lean(),
+      Follow.find({ follower: req.user._id }).select('following').lean()
     ]);
 
     const blockedIds = blockedRecords.map(b => 
@@ -158,14 +158,16 @@ export const getPosts = asyncHandler(async (req, res) => {
     followingRecords.forEach(f => followingSet.add(f.following.toString()));
   }
 
+  const postQuery = Post.find(query)
+    .populate('author', 'username displayName avatar bio privacySettings')
+    .populate('community', 'name slug icon')
+    .populate('mediaAnalysis')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
   const [rawPosts, total] = await Promise.all([
-    Post.find(query)
-      .populate('author', 'username displayName avatar bio privacySettings')
-      .populate('community', 'name slug icon')
-      .populate('mediaAnalysis')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit),
+    typeof postQuery.lean === 'function' ? postQuery.lean() : postQuery,
     Post.countDocuments(query)
   ]);
 
@@ -189,15 +191,15 @@ export const getPosts = asyncHandler(async (req, res) => {
   if (req.user && posts.length > 0) {
     const postIds = posts.map(p => p._id);
     const [likes, saves] = await Promise.all([
-      Like.find({ user: req.user._id, post: { $in: postIds } }),
-      SavedPost.find({ user: req.user._id, post: { $in: postIds } })
+      Like.find({ user: req.user._id, post: { $in: postIds } }).lean(),
+      SavedPost.find({ user: req.user._id, post: { $in: postIds } }).lean()
     ]);
     likes.forEach(l => likedPostIds.add(l.post.toString()));
     saves.forEach(s => savedPostIds.add(s.post.toString()));
   }
 
   const formattedPosts = posts.map(post => {
-    const postObj = post.toObject();
+    const postObj = post.toObject ? post.toObject() : post;
     const idStr = post._id.toString();
     return {
       ...postObj,

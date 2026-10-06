@@ -56,6 +56,7 @@ const mediaAnalysisSchema = new mongoose.Schema({
       'AI_EDITING_DOCUMENTED',
       'LIKELY_AI_GENERATED',
       'NO_STRONG_AI_SIGNALS',
+      'LIKELY_AUTHENTIC',
       'INCONCLUSIVE',
       'CHECK_UNAVAILABLE',
       'PENDING'
@@ -116,7 +117,7 @@ const mediaAnalysisSchema = new mongoose.Schema({
   },
   policyVersion: {
     type: String,
-    default: '2026.1'
+    default: '2026.2'
   },
   retryCount: {
     type: Number,
@@ -124,6 +125,19 @@ const mediaAnalysisSchema = new mongoose.Schema({
   },
   error: {
     type: String,
+    default: ''
+  },
+  errorCode: {
+    type: String,
+    enum: [
+      '',
+      'MODEL_NOT_READY',
+      'SERVICE_UNREACHABLE',
+      'IMAGE_FETCH_FAILED',
+      'INFERENCE_TIMEOUT',
+      'INFERENCE_FAILED',
+      'UNKNOWN_ERROR'
+    ],
     default: ''
   },
   reviewRequest: {

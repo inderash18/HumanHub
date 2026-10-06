@@ -5,16 +5,28 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    host: '0.0.0.0', // Ensure visibility in Docker
-    open: false,     // MUST be false in Docker/Headless to prevent loop/crashes
+    host: '0.0.0.0',
+    open: false,
     watch: {
-        usePolling: true, // Crucial for Docker on Windows/Mac
+      usePolling: true,
     },
     hmr: {
-        clientPort: 80, // Browser is at port 80 (Nginx), not 3000
+      clientPort: 80,
     }
   },
   build: {
     outDir: 'dist',
+    target: 'es2022',
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-ui': ['lucide-react', 'react-hot-toast', 'framer-motion'],
+          'vendor-network': ['axios', 'socket.io-client', 'zustand']
+        }
+      }
+    }
   },
 });

@@ -30,6 +30,10 @@ export default function ImageOriginBadge({
     label = 'Checking image...';
     variant = 'pending';
     Icon = Loader2;
+  } else if (processingState === 'FAILED' || outcome === 'CHECK_UNAVAILABLE') {
+    Icon = Info;
+    variant = 'unavailable';
+    label = evidence?.badgeLabel || 'Image check unavailable';
   } else if (outcome === 'AI_ORIGIN_DOCUMENTED') {
     Icon = Sparkles;
     variant = 'verified';
@@ -42,7 +46,7 @@ export default function ImageOriginBadge({
     Icon = AlertTriangle;
     variant = 'warning';
     label = evidence?.badgeLabel || 'Likely AI-generated';
-  } else if (outcome === 'NO_STRONG_AI_SIGNALS') {
+  } else if (outcome === 'LIKELY_AUTHENTIC' || outcome === 'NO_STRONG_AI_SIGNALS') {
     if (evidence?.cameraOriginVerified) {
       Icon = Camera;
       variant = 'verified';
@@ -50,16 +54,16 @@ export default function ImageOriginBadge({
     } else {
       Icon = ShieldCheck;
       variant = 'neutral';
-      label = evidence?.badgeLabel || 'No strong AI signals';
+      label = evidence?.badgeLabel || 'Likely authentic';
     }
   } else if (outcome === 'INCONCLUSIVE') {
     Icon = HelpCircle;
     variant = 'neutral';
-    label = evidence?.badgeLabel || 'Inconclusive';
-  } else if (outcome === 'CHECK_UNAVAILABLE' || processingState === 'FAILED') {
+    label = evidence?.badgeLabel || 'Could not determine';
+  } else {
     Icon = Info;
     variant = 'unavailable';
-    label = evidence?.badgeLabel || 'Check unavailable';
+    label = evidence?.badgeLabel || 'Image check unavailable';
   }
 
   const variantStyles = {

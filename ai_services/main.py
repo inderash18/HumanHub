@@ -15,6 +15,10 @@ from pydantic import BaseModel
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(__file__))
 
+# Ensure offline operation by default to prevent indefinite network hanging
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
 from detectors.universal_fake_detect import UniversalFakeDetectAdapter
 from provenance.c2pa_verifier import C2PAVerifier
 from metadata.extractor import MetadataExtractor
@@ -23,16 +27,28 @@ from engine.decision_policy import DecisionEngine, AnalysisReport
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("ai_service")
 
+import time
+
 # Global engine instances
 detector = UniversalFakeDetectAdapter(device=os.getenv("DEVICE", "cpu"))
 c2pa_verifier = C2PAVerifier()
 metadata_extractor = MetadataExtractor()
 decision_engine = DecisionEngine()
 
+model_startup_duration_ms: float = 0.0
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global model_startup_duration_ms
     logger.info("Initializing Detection and Provenance Engines...")
+    t0 = time.perf_counter()
     detector.load_model()
+    model_startup_duration_ms = (time.perf_counter() - t0) * 1000
+    logger.info(
+        "Model startup completed in %.2fms. Detector ready: %s",
+        model_startup_duration_ms,
+        detector.is_ready
+    )
     yield
     logger.info("Shutting down AI Service...")
 
@@ -58,20 +74,23 @@ def health():
         "service": "HumanHub Origin Analysis",
         "detector_ready": detector.is_ready,
         "detector_name": detector.model_name,
-        "device": detector.device
+        "device": detector.device,
+        "startup_duration_ms": round(model_startup_duration_ms, 2)
     }
 
 @app.get("/readiness")
 def readiness():
     return {
-        "ready": True,
+        "ready": bool(detector.is_ready),
+        "startup_duration_ms": round(model_startup_duration_ms, 2),
         "detector": {
             "name": detector.model_name,
             "version": detector.version,
-            "ready": detector.is_ready,
+            "ready": bool(detector.is_ready),
             "checkpoint": detector.checkpoint_identifier,
             "sha256": detector.actual_sha256,
-            "device": detector.device
+            "device": detector.device,
+            "load_error": detector._load_error
         },
         "c2pa": {
             "library_loaded": c2pa_verifier._c2pa_available

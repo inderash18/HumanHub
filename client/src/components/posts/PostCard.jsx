@@ -77,15 +77,19 @@ export default function PostCard({ post, onUpdate }) {
   useEffect(() => {
     if (!socket) return;
     const handleAnalysisUpdate = (data) => {
-      if (data && data.mediaId) {
+      if (data && (data.mediaId || data.mediaUrl)) {
         setMediaAnalysisMap(prev => {
           const updated = { ...prev };
-          // Find matching key by mediaId or update all matching
+          let matched = false;
           Object.keys(updated).forEach(url => {
-            if (updated[url].mediaId === data.mediaId) {
+            if (updated[url]?.mediaId === data.mediaId || (data.mediaUrl && url === data.mediaUrl)) {
               updated[url] = { ...updated[url], ...data };
+              matched = true;
             }
           });
+          if (!matched && data.mediaUrl) {
+            updated[data.mediaUrl] = data;
+          }
           return updated;
         });
       }

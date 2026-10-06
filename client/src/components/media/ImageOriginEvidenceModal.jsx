@@ -69,25 +69,26 @@ export default function ImageOriginEvidenceModal({
           icon: AlertTriangle,
           desc: 'Statistical pixel analysis and metadata patterns indicate characteristics typical of synthetic media.'
         };
+      case 'LIKELY_AUTHENTIC':
       case 'NO_STRONG_AI_SIGNALS':
         return {
-          title: evidence?.cameraOriginVerified ? 'Camera Capture Documented' : 'No Strong AI Signals Detected',
+          title: evidence?.cameraOriginVerified ? 'Camera Capture Documented' : 'Likely Authentic',
           badgeColor: 'text-[#00BA88] bg-[#00BA88]/10 border-[#00BA88]/30',
           icon: evidence?.cameraOriginVerified ? Camera : ShieldCheck,
           desc: evidence?.cameraOriginVerified 
             ? 'Hardware Content Credentials verify this image originated from a physical camera sensor.'
-            : 'No synthetic pixel patterns or AI generation credentials were identified during automated analysis.'
+            : 'Pixel feature analysis and metadata inspection found no indicators of generative AI synthesis.'
         };
       case 'INCONCLUSIVE':
         return {
-          title: 'Inconclusive Result',
+          title: 'Could Not Determine',
           badgeColor: 'text-[var(--text-secondary)] bg-[var(--surface-elevated)] border-[var(--border)]',
           icon: HelpCircle,
           desc: 'Evidence is ambiguous or intermediate. The system abstains from making a definitive determination.'
         };
       default:
         return {
-          title: isPending ? 'Analyzing Media...' : 'Origin Check Unavailable',
+          title: isPending ? 'Checking Image...' : 'Image Check Unavailable',
           badgeColor: 'text-[var(--text-tertiary)] bg-[var(--surface-elevated)] border-[var(--border)]',
           icon: AlertCircle,
           desc: isPending 
@@ -116,7 +117,7 @@ export default function ImageOriginEvidenceModal({
               Media Origin & Provenance
             </h2>
             <span className="text-[10px] font-mono text-[var(--text-tertiary)] px-1.5 py-0.5 rounded bg-[var(--surface-elevated)]">
-              v{policyVersion || '2026.1'}
+              v{policyVersion || '2026.2'}
             </span>
           </div>
 
@@ -225,9 +226,9 @@ export default function ImageOriginEvidenceModal({
                   Transparency & Limitations
                 </h5>
                 <ul className="text-[10px] text-[var(--text-tertiary)] space-y-1 list-disc pl-4 leading-relaxed">
-                  <li>Automated pixel models evaluate statistical likelihood and never claim 100% certainty.</li>
-                  <li>"No strong AI signals detected" does not guarantee an image is an authentic camera photograph.</li>
-                  <li>Private fields (GPS coordinates, serial numbers) have been strictly stripped.</li>
+                  <li>This automated check can make mistakes. Statistical detectors provide likelihood estimates and do not guarantee 100% accuracy.</li>
+                  <li>"Likely authentic" does not guarantee an image is an original camera photograph.</li>
+                  <li>Private fields (GPS coordinates, device serial numbers) have been strictly redacted.</li>
                 </ul>
               </div>
             </div>

@@ -1,5 +1,16 @@
 import mongoose from 'mongoose';
 
+const mediaItemSchema = new mongoose.Schema({
+  url: { type: String, required: true },
+  publicId: { type: String, default: '' },
+  provider: { type: String, default: 'cloudinary' },
+  resourceType: { type: String, enum: ['image', 'video', 'raw', 'auto'], default: 'image' },
+  format: { type: String, default: '' },
+  bytes: { type: Number, default: 0 },
+  width: { type: Number, default: 0 },
+  height: { type: Number, default: 0 }
+}, { _id: false });
+
 const storySchema = new mongoose.Schema({
   author: {
     type: mongoose.Schema.Types.ObjectId,
@@ -7,6 +18,7 @@ const storySchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  media: mediaItemSchema,
   mediaUrl: {
     type: String,
     required: true

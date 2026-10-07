@@ -28,7 +28,11 @@ const mediaAnalysisSchema = new mongoose.Schema({
   },
   originalPath: {
     type: String,
-    required: true
+    default: ''
+  },
+  cloudinaryPublicId: {
+    type: String,
+    default: ''
   },
   fileHash: {
     type: String,

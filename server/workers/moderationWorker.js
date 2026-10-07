@@ -9,20 +9,39 @@ import { getIO } from '../socket/socketHandler.js';
  * Integrates real MediaAnalysis decisions directly.
  */
 export async function processQueueItem() {
-  let item = null;
-  try {
-    item = await redis.rpop('moderation:queue');
-  } catch {
-    return;
+  let post = null;
+
+  // 1. Try Redis queue pop if Redis is configured
+  if (redis) {
+    try {
+      const item = await redis.rpop('moderation:queue');
+      if (item) {
+        const { postId } = JSON.parse(item);
+        if (postId) {
+          post = await Post.findOne({ _id: postId, status: 'pending_review' });
+        }
+      }
+    } catch {}
   }
-  if (!item) return;
 
-  let postId;
+  // 2. MongoDB Fallback
+  if (!post) {
+    try {
+      post = await Post.findOne({
+        status: 'pending_review',
+        $or: [
+          { 'detectionScores.text': { $exists: false } },
+          { 'detectionScores.text.status': { $ne: 'ok' } }
+        ]
+      }).sort({ createdAt: 1 });
+    } catch {}
+  }
+
+  if (!post) return;
+
+  const postId = post._id;
+
   try {
-    ({ postId } = JSON.parse(item));
-    const post = await Post.findOne({ _id: postId, status: 'pending_review' });
-    if (!post) return;
-
     // 1. Check associated MediaAnalysis records
     let mediaApproved = true;
     let mediaBlocked = false;

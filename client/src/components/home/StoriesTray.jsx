@@ -140,17 +140,19 @@ export default function StoriesTray() {
       setUploading(true);
       const formData = new FormData();
       formData.append('files', selectedFile);
+      formData.append('folder', 'stories');
 
       // Upload media file
-      const uploadRes = await api.post('/upload', formData, {
+      const uploadRes = await api.post('/upload?folder=stories', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      const mediaUrl = uploadRes.data?.url || uploadRes.data?.fileUrl || uploadRes.data?.path || uploadRes.data?.urls?.[0];
+      const mediaUrl = uploadRes.data?.secure_url || uploadRes.data?.url || uploadRes.data?.fileUrl || uploadRes.data?.path || uploadRes.data?.urls?.[0];
+      const mediaItem = uploadRes.data?.media?.[0];
       if (!mediaUrl) throw new Error('Upload failed: no media URL returned');
 
       // Create story with authoritative server session
-      await createStory(mediaUrl, caption.trim());
+      await api.post('/stories', { mediaUrl, media: mediaItem, caption: caption.trim() });
 
       toast.success('Story posted successfully!');
       setCreateModalOpen(false);

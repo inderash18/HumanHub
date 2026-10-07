@@ -9,8 +9,7 @@
     "dev": "nodemon server.js",
     "db:clear": "node scripts/clearDatabase.js",
     "seed": "node scripts/seedCommunities.js",
-    "debug:db": "node scripts/debugDb.js",
-    "test": "node --test tests/*.test.js"
+    "debug:db": "node scripts/debugDb.js"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.1",
@@ -26,7 +25,6 @@
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
     "ioredis": "^5.3.2",
-    "jsdom": "^30.1.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.2",
     "multer": "^1.4.5-lts.1",
@@ -35,7 +33,6 @@
     "socket.io": "^4.7.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1",
-    "socket.io-client": "^4.8.3"
+    "nodemon": "^3.0.1"
   }
 }

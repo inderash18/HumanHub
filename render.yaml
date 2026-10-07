@@ -1,5 +1,5 @@
 services:
-  # 1. Backend Express API
+  # Render Web Service for HumanHub Backend API
   - type: web
     name: humanhub-backend
     runtime: node
@@ -7,6 +7,7 @@ services:
     rootDir: server
     buildCommand: npm install
     startCommand: npm start
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
@@ -14,29 +15,27 @@ services:
         value: 10000
       - key: MONGODB_URI
         sync: false
-      - key: REDIS_URL
-        sync: false
-      - key: FRONTEND_URL
-        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
       - key: MFA_ENCRYPTION_KEY
         generateValue: true
-      - key: AI_SERVICE_URL
+      - key: FRONTEND_URL
         sync: false
-
-  # 2. AI Microservice (FastAPI + Python ML)
-  - type: web
-    name: humanhub-ai
-    runtime: python
-    plan: free
-    rootDir: ai_services
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - key: MODEL_CACHE_DIR
-        value: /tmp/models
-      - key: ENABLE_C2PA_VERIFICATION
+      - key: CORS_ORIGIN
+        sync: false
+      - key: COOKIE_SECURE
         value: "true"
+      - key: COOKIE_SAME_SITE
+        value: none
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

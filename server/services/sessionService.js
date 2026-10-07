@@ -7,10 +7,18 @@ import { jwtSecret } from '../config/security.js';
 
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const lifetime = 7 * 24 * 60 * 60 * 1000;
-export const cookieOptions = () => ({
-  httpOnly: true, secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax', path: '/api/auth', maxAge: lifetime
-});
+export const cookieOptions = () => {
+  const isProd = process.env.NODE_ENV === 'production';
+  const sameSite = process.env.COOKIE_SAME_SITE || (isProd ? 'none' : 'lax');
+  const secure = process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : isProd;
+  return {
+    httpOnly: true,
+    secure,
+    sameSite,
+    path: '/api/auth',
+    maxAge: lifetime
+  };
+};
 
 export function clearCookieOptions() {
   const { maxAge, ...options } = cookieOptions();

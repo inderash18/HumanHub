@@ -12,46 +12,72 @@ const MAX_RETRIES = 3;
 /**
  * Process a single image analysis job from the Redis queue.
  */
+const STALE_JOB_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes stale lease timeout
+
+/**
+ * Process a single image analysis job from the Redis queue or MongoDB fallback.
+ */
 export async function processAnalysisJob() {
-  let rawJob = null;
-  try {
-    rawJob = await redis.rpop(QUEUE_KEY);
-  } catch (err) {
-    console.error('[MediaAnalysisWorker] Redis connection issue:', err.message);
+  let analysis = null;
+
+  // 1. Attempt Redis queue pop if Redis is connected
+  if (redis) {
+    try {
+      const rawJob = await redis.rpop(QUEUE_KEY);
+      if (rawJob) {
+        const jobData = JSON.parse(rawJob);
+        const targetId = jobData.id || jobData.analysisId;
+        if (targetId) {
+          // Atomic claim from Redis job reference
+          analysis = await MediaAnalysis.findOneAndUpdate(
+            {
+              _id: targetId,
+              processingState: { $in: ['QUEUED', 'RUNNING'] }
+            },
+            {
+              $set: { processingState: 'RUNNING' }
+            },
+            { new: true }
+          );
+        }
+      }
+    } catch (err) {
+      // Gracefully ignore Redis throttling or connection drops; fallback to MongoDB
+    }
   }
 
-  // Fallback: Check MongoDB directly if Redis had no job
-  if (!rawJob) {
+  // 2. MongoDB Atomic Fallback & Stale Job Recovery
+  // Claims oldest QUEUED job OR stale RUNNING job abandoned after worker restart/crash
+  if (!analysis) {
     try {
-      const pendingDoc = await MediaAnalysis.findOne({ processingState: 'QUEUED' }).sort({ createdAt: 1 });
-      if (pendingDoc) {
-        rawJob = JSON.stringify({ id: String(pendingDoc._id), mediaId: pendingDoc.mediaId, mediaVersion: pendingDoc.mediaVersion });
-      }
+      const staleThreshold = new Date(Date.now() - STALE_JOB_TIMEOUT_MS);
+      analysis = await MediaAnalysis.findOneAndUpdate(
+        {
+          $or: [
+            { processingState: 'QUEUED' },
+            { processingState: 'RUNNING', updatedAt: { $lt: staleThreshold } }
+          ]
+        },
+        {
+          $set: {
+            processingState: 'RUNNING'
+          }
+        },
+        {
+          sort: { createdAt: 1 },
+          new: true
+        }
+      );
     } catch (dbErr) {
       // Ignore DB read errors
     }
   }
 
-  if (!rawJob) return;
+  if (!analysis) return;
 
-  let jobId, mediaId, mediaVersion;
+  const jobId = analysis._id;
+
   try {
-    const jobData = JSON.parse(rawJob);
-    jobId = jobData.id || jobData.analysisId;
-    mediaId = jobData.mediaId;
-    mediaVersion = jobData.mediaVersion || 1;
-
-    const analysis = await MediaAnalysis.findOne({
-      _id: jobId,
-      processingState: { $in: ['QUEUED', 'RUNNING'] }
-    });
-
-    if (!analysis) return;
-
-    // Set state to RUNNING
-    analysis.processingState = 'RUNNING';
-    await analysis.save();
-
     // Check if an existing completed analysis exists for this exact fileHash
     const existingAnalysis = await MediaAnalysis.findOne({
       fileHash: analysis.fileHash,
@@ -73,23 +99,46 @@ export async function processAnalysisJob() {
         detector: existingAnalysis.detector,
         evidence: existingAnalysis.evidence
       };
+    } else if (!process.env.AI_SERVICE_URL) {
+      // AI detection unconfigured in free deployment tier -> route to manual review
+      report = {
+        outcome: 'CHECK_UNAVAILABLE',
+        publication_decision: 'HELD_FOR_REVIEW',
+        decision_reason: 'Automated AI analysis is unconfigured in this deployment. Media held for manual moderation.',
+        policy_version: '2026.2',
+        evidence: {
+          badge_label: 'Manual Review Required',
+          badge_variant: 'neutral',
+          primary_explanation: 'Automated verification is unconfigured. Media submitted for manual review.',
+          detailed_points: ['Deployment is running in free manual-review mode.'],
+          limitations: ['Manual moderator approval required before public feed display.'],
+          camera_origin_verified: false
+        }
+      };
     } else {
-      if (!fs.existsSync(analysis.originalPath)) {
-        throw new Error(`Original media file not found at ${analysis.originalPath}`);
+      let fileStream;
+      if (analysis.originalPath && fs.existsSync(analysis.originalPath)) {
+        fileStream = fs.createReadStream(analysis.originalPath);
+      } else if (analysis.mediaUrl && (analysis.mediaUrl.startsWith('http://') || analysis.mediaUrl.startsWith('https://'))) {
+        const imgStreamRes = await axios.get(analysis.mediaUrl, { responseType: 'stream', timeout: 15000 });
+        fileStream = imgStreamRes.data;
+      } else {
+        throw new Error(`Media file stream unavailable for ${analysis.mediaId}`);
       }
 
-      // Prepare multipart form with unaltered original image bytes
+      // Prepare multipart form with unaltered image bytes
       const form = new FormData();
-      form.append('file', fs.createReadStream(analysis.originalPath), {
+      form.append('file', fileStream, {
         filename: `${analysis.mediaId}.jpg`,
         contentType: analysis.mimeType || 'image/jpeg'
       });
 
-      const response = await axios.post(`${AI_SERVICE_URL}/analyze/image-origin`, form, {
+      const response = await axios.post(`${process.env.AI_SERVICE_URL}/analyze/image-origin`, form, {
         headers: {
-          ...form.getHeaders()
+          ...form.getHeaders(),
+          ...(process.env.AI_SERVICE_SECRET ? { 'X-Internal-Secret': process.env.AI_SERVICE_SECRET } : {})
         },
-        timeout: 30000,
+        timeout: 45000,
         maxContentLength: 50 * 1024 * 1024,
         maxBodyLength: 50 * 1024 * 1024
       });
@@ -294,12 +343,15 @@ export async function processAnalysisJob() {
         } else {
           // Requeue for retry with exponential backoff
           analysis.processingState = 'QUEUED';
-          await analysis.save();
-          setTimeout(async () => {
-            try {
-              await redis.lpush(QUEUE_KEY, JSON.stringify({ id: analysis._id, mediaId: analysis.mediaId, mediaVersion: analysis.mediaVersion }));
-            } catch {}
+          if (typeof analysis.save === 'function') await analysis.save();
+          const retryTimer = setTimeout(async () => {
+            if (redis) {
+              try {
+                await redis.lpush(QUEUE_KEY, JSON.stringify({ id: analysis._id, mediaId: analysis.mediaId, mediaVersion: analysis.mediaVersion }));
+              } catch {}
+            }
           }, Math.pow(2, analysis.retryCount) * 1000);
+          if (retryTimer.unref) retryTimer.unref();
         }
       }
     }

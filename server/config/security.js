@@ -9,19 +9,31 @@ export function jwtSecret() {
 }
 
 export function allowedOrigins() {
-  const configured = (process.env.FRONTEND_URL || '').split(',').map(s => s.trim()).filter(Boolean);
+  const rawOrigins = `${process.env.FRONTEND_URL || ''},${process.env.CORS_ORIGIN || ''}`;
+  const configured = rawOrigins
+    .split(',')
+    .map(s => s.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
   return new Set(process.env.NODE_ENV === 'production'
-    ? configured
+    ? (configured.length > 0 ? configured : ['http://localhost:3000'])
     : [...configured, 'http://localhost:3000', 'http://localhost:5173']);
 }
 
 export function corsOrigin(origin, callback) {
-  callback(null, !origin || allowedOrigins().has(origin));
+  if (!origin) return callback(null, true);
+  const cleanOrigin = origin.replace(/\/+$/, '');
+  const allowed = allowedOrigins();
+  if (allowed.has(cleanOrigin) || allowed.has('*')) {
+    return callback(null, true);
+  }
+  return callback(null, false);
 }
 
 export function requireTrustedOrigin(req, res, next) {
-  if ((req.headers.origin && !allowedOrigins().has(req.headers.origin)) ||
-      req.headers['sec-fetch-site'] === 'cross-site' && !req.headers.origin) {
+  const origin = req.headers.origin ? req.headers.origin.replace(/\/+$/, '') : null;
+  if ((origin && !allowedOrigins().has(origin)) ||
+      (req.headers['sec-fetch-site'] === 'cross-site' && !origin)) {
     return res.status(403).json({ success: false, message: 'Origin is not allowed.' });
   }
   next();

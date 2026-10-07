@@ -1,5 +1,16 @@
 import mongoose from 'mongoose';
 
+const mediaItemSchema = new mongoose.Schema({
+  url: { type: String, required: true },
+  publicId: { type: String, default: '' },
+  provider: { type: String, default: 'cloudinary' },
+  resourceType: { type: String, enum: ['image', 'video', 'raw', 'auto'], default: 'image' },
+  format: { type: String, default: '' },
+  bytes: { type: Number, default: 0 },
+  width: { type: Number, default: 0 },
+  height: { type: Number, default: 0 }
+}, { _id: false });
+
 const userSchema = new mongoose.Schema({
   username: {
     type: String,
@@ -52,6 +63,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  avatarMedia: mediaItemSchema,
   bio: {
     type: String,
     maxlength: 300,
@@ -93,8 +105,6 @@ const userSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-userSchema.index({ username: 1 });
-userSchema.index({ email: 1 });
 userSchema.index({ createdAt: -1 });
 
 export default mongoose.model('User', userSchema);

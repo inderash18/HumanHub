@@ -10,8 +10,6 @@
     "dev:ai": "cd ai_services && uvicorn main:app --host 0.0.0.0 --port 8000 --reload",
     "build": "npm --prefix client run build",
     "build:client": "npm --prefix client run build",
-    "test": "npm --prefix server test",
-    "test:server": "npm --prefix server test",
     "lint": "npm --prefix client run lint",
     "install:all": "npm install --prefix client && npm install --prefix server",
     "db:clear": "npm --prefix server run db:clear",

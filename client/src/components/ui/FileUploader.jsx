@@ -25,12 +25,13 @@ export default function FileUploader({ onUploadComplete, currentImage = '' }) {
         const loadingToast = toast.loading('Uploading quality creation...');
 
         try {
-            const { data } = await api.post('/posts/upload', formData, {
+            const { data } = await api.post('/posts/upload?folder=posts', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             
-            setPreview(data.url);
-            onUploadComplete(data.url);
+            const uploadedUrl = data.secure_url || data.url;
+            setPreview(uploadedUrl);
+            onUploadComplete(uploadedUrl, data.media?.[0]);
             toast.success("Ready for humanity scan", { id: loadingToast });
         } catch (err) {
             console.error(err);

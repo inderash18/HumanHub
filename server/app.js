@@ -20,12 +20,15 @@ import moderationRoutes from './routes/moderation.js';
 import mediaAnalysisRoutes from './routes/mediaAnalysis.js';
 import storyRoutes from './routes/stories.js';
 
+import mongoose from 'mongoose';
+import redis from './config/redis.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Trust proxy for IP forwarding
+// Trust proxy for IP forwarding behind Render/Vercel/Reverse Proxies
 app.set('trust proxy', 1);
 
 // Production-ready security headers via Helmet
@@ -36,8 +39,8 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-      imgSrc: ["'self'", "data:", "blob:", "http://localhost:*", "http://127.0.0.1:*"],
-      connectSrc: ["'self'", "ws:", "wss:", "http://localhost:*", "http://127.0.0.1:*"],
+      imgSrc: ["'self'", "data:", "blob:", "https:", "http://localhost:*", "http://127.0.0.1:*"],
+      connectSrc: ["'self'", "ws:", "wss:", "https:", "http://localhost:*", "http://127.0.0.1:*"],
       frameAncestors: ["'none'"],
       objectSrc: ["'none'"],
       upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
@@ -52,6 +55,30 @@ app.use(cors({ origin: corsOrigin, credentials: true }));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Liveness and Readiness endpoints for cloud host probes (Render, Vercel, Uptime monitors)
+app.get(['/health', '/api/health'], (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    service: 'humanhub-backend',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get(['/ready', '/api/ready'], async (req, res) => {
+  const dbReady = mongoose.connection.readyState === 1;
+  const redisReady = redis ? (redis.status === 'ready' || redis.status === 'connect') : false;
+  const isHealthy = dbReady; // Core MongoDB is required; Redis queue has native MongoDB queue
+
+  res.status(isHealthy ? 200 : 503).json({
+    ready: isHealthy,
+    database: dbReady ? 'connected' : 'disconnected',
+    queue: redisReady ? 'redis' : 'mongodb_native',
+    redis: redis ? (redisReady ? 'connected' : 'disconnected') : 'optional_omitted',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Apply rate limiting to API
 app.use('/api', apiLimiter);

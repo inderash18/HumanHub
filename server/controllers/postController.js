@@ -12,20 +12,25 @@ import Follow from '../models/Follow.js';
 import Block from '../models/Block.js';
 import { canViewPost, canDeletePost } from '../policies/authorization.js';
 
+import { deleteFromCloudinary } from '../config/cloudinary.js';
+
 // @desc    Create a new post
 // @route   POST /api/posts
 // @access  Private
 export const createPost = asyncHandler(async (req, res) => {
-  const { caption, body, title, communityId, mediaUrls, mediaIds, tags } = req.body;
+  const { caption, body, title, communityId, mediaUrls, mediaIds, media, tags } = req.body;
 
   const contentText = (caption || body || title || '').trim();
   const rawMediaList = Array.isArray(mediaUrls) ? mediaUrls : (mediaUrls ? [mediaUrls] : []);
 
-  // Validate that media URLs are relative uploaded paths and not malicious remote URLs
+  // Validate that media URLs are relative uploaded paths or verified Cloudinary URLs
   const mediaList = rawMediaList.filter(url => {
     if (typeof url !== 'string') return false;
     const clean = url.trim().split('#')[0]; // Strip URL hash fragments
-    return clean.startsWith('/api/uploads/') || clean.startsWith('/uploads/');
+    return clean.startsWith('/api/uploads/') || 
+           clean.startsWith('/uploads/') ||
+           clean.startsWith('https://res.cloudinary.com/') ||
+           clean.includes('cloudinary.com');
   }).map(url => url.trim().split('#')[0]);
 
   if (!contentText && mediaList.length === 0) {
@@ -104,12 +109,39 @@ export const createPost = asyncHandler(async (req, res) => {
     postStatus = 'pending_review';
   }
 
+  const mediaItems = [];
+  if (req.body.media && Array.isArray(req.body.media)) {
+    for (const item of req.body.media) {
+      if (item && item.url) {
+        mediaItems.push({
+          url: item.url,
+          publicId: item.publicId || item.public_id || '',
+          provider: item.provider || (item.url.includes('cloudinary') ? 'cloudinary' : 'local'),
+          resourceType: item.resourceType || item.resource_type || (item.url.includes('.mp4') ? 'video' : 'image'),
+          format: item.format || '',
+          bytes: item.bytes || 0,
+          width: item.width || 0,
+          height: item.height || 0
+        });
+      }
+    }
+  } else {
+    for (const url of mediaList) {
+      mediaItems.push({
+        url,
+        provider: url.includes('cloudinary') ? 'cloudinary' : 'local',
+        resourceType: url.endsWith('.mp4') || url.endsWith('.webm') ? 'video' : 'image'
+      });
+    }
+  }
+
   const post = await Post.create({
     caption: contentText,
     body: contentText,
     author: req.user._id,
     community: assignedCommunity,
-    mediaUrls: mediaList,
+    media: mediaItems,
+    mediaUrls: mediaList.length > 0 ? mediaList : mediaItems.map(m => m.url),
     mediaAnalysis: analysisDocIds,
     mediaType,
     tags: extractedTags,
@@ -117,12 +149,14 @@ export const createPost = asyncHandler(async (req, res) => {
   });
 
   if (mediaList.length === 0) {
-    try {
-      await redis.lpush('moderation:queue', JSON.stringify({ postId: String(post._id), text: contentText }));
-    } catch (err) {
-      moderationError = 'Queue unavailable. Post preserved for manual moderator review.';
-      post.moderationError = moderationError;
-      await post.save().catch(() => {});
+    if (redis) {
+      try {
+        await redis.lpush('moderation:queue', JSON.stringify({ postId: String(post._id), text: contentText }));
+      } catch (err) {
+        moderationError = 'Queue unavailable. Post preserved for manual moderator review.';
+        post.moderationError = moderationError;
+        await post.save().catch(() => {});
+      }
     }
   }
 
@@ -498,6 +532,15 @@ export const deletePost = asyncHandler(async (req, res) => {
   if (post.author.toString() !== req.user._id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
     res.status(403);
     throw new Error('You are not authorized to delete this post');
+  }
+
+  // Clean up any Cloudinary assets associated with this post
+  if (post.media && post.media.length > 0) {
+    for (const item of post.media) {
+      if (item.publicId) {
+        deleteFromCloudinary(item.publicId, item.resourceType).catch(() => {});
+      }
+    }
   }
 
   await Promise.all([

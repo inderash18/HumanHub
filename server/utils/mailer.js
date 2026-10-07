@@ -1,7 +1,38 @@
 import nodemailer from 'nodemailer';
 
-// Create Nodemailer Transporter using environment variables or a development console transporter
+// Create Nodemailer / HTTP Transporter using environment variables or a development console transporter
 const createTransporter = () => {
+  // 1. Resend HTTPS REST API (Recommended for Render/Serverless where SMTP ports 25/465/587 are blocked)
+  if (process.env.RESEND_API_KEY) {
+    return {
+      sendMail: async ({ from, to, subject, text, html }) => {
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: from || process.env.EMAIL_FROM || 'HumanHub Security <onboarding@resend.dev>',
+            to: Array.isArray(to) ? to : [to],
+            subject,
+            text,
+            html
+          })
+        });
+
+        if (!response.ok) {
+          const errBody = await response.text();
+          throw new Error(`Resend API error (${response.status}): ${errBody}`);
+        }
+
+        const data = await response.json();
+        return { messageId: data.id };
+      }
+    };
+  }
+
+  // 2. Direct SMTP Transport (For self-hosted or hosts allowing outbound SMTP)
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
     return nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -14,6 +45,7 @@ const createTransporter = () => {
     });
   }
 
+  // 3. Gmail App Password Transport
   if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
     return nodemailer.createTransport({
       service: 'gmail',

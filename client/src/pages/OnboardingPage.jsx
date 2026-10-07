@@ -66,12 +66,13 @@ export default function OnboardingPage() {
       setUploadingPhoto(true);
       const formData = new FormData();
       formData.append('files', file);
+      formData.append('folder', 'avatars');
 
-      const res = await api.post('/upload', formData, {
+      const res = await api.post('/upload?folder=avatars', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      const newAvatarUrl = res.data.url || (res.data.urls && res.data.urls[0]);
+      const newAvatarUrl = res.data.secure_url || res.data.url || (res.data.urls && res.data.urls[0]);
       if (newAvatarUrl) {
         setAvatar(newAvatarUrl);
         toast.success('Avatar uploaded! ✨');

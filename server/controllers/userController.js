@@ -138,6 +138,18 @@ export const updateUserProfile = asyncHandler(async (req, res) => {
   if (typeof req.body.displayName === 'string') user.displayName = req.body.displayName.trim().slice(0, 50);
   if (typeof req.body.bio === 'string') user.bio = req.body.bio.trim().slice(0, 300);
   if (typeof req.body.avatar === 'string') user.avatar = req.body.avatar.trim();
+  if (req.body.avatarMedia && typeof req.body.avatarMedia === 'object') {
+    user.avatarMedia = {
+      url: req.body.avatarMedia.url || user.avatar,
+      publicId: req.body.avatarMedia.publicId || req.body.avatarMedia.public_id || '',
+      provider: 'cloudinary',
+      resourceType: 'image',
+      format: req.body.avatarMedia.format || '',
+      bytes: req.body.avatarMedia.bytes || 0,
+      width: req.body.avatarMedia.width || 0,
+      height: req.body.avatarMedia.height || 0
+    };
+  }
   if (req.body.privacySettings && typeof req.body.privacySettings === 'object') {
     if (typeof req.body.privacySettings.isPrivate === 'boolean') {
       user.privacySettings.isPrivate = req.body.privacySettings.isPrivate;

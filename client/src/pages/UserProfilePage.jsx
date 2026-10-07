@@ -145,15 +145,17 @@ export default function UserProfilePage() {
       setUploadingAvatar(true);
       const formData = new FormData();
       formData.append('files', file);
+      formData.append('folder', 'avatars');
 
-      const uploadRes = await api.post('/upload', formData, {
+      const uploadRes = await api.post('/upload?folder=avatars', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      const avatarUrl = uploadRes.data.url || (uploadRes.data.urls && uploadRes.data.urls[0]);
+      const avatarUrl = uploadRes.data.secure_url || uploadRes.data.url || (uploadRes.data.urls && uploadRes.data.urls[0]);
+      const avatarMedia = uploadRes.data.media?.[0];
 
       if (avatarUrl) {
-        await api.put('/users/profile', { avatar: avatarUrl });
-        updateUser({ avatar: avatarUrl });
+        await api.put('/users/profile', { avatar: avatarUrl, avatarMedia });
+        updateUser({ avatar: avatarUrl, avatarMedia });
         toast.success('Profile photo updated');
         fetchUserProfile();
       }

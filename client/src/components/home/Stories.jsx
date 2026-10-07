@@ -92,17 +92,23 @@ export default function Stories() {
         try {
             const formData = new FormData();
             formData.append('images', file);
+            formData.append('folder', 'stories');
             
-            const { data } = await api.post('/posts/upload', formData, {
+            const { data } = await api.post('/posts/upload?folder=stories', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
-            const uploadedUrl = data.urls?.[0];
+            const uploadedUrl = data.secure_url || data.url || data.urls?.[0];
+            const mediaItem = data.media?.[0];
 
             if (!uploadedUrl) throw new Error('No upload URL returned');
 
-            const response = await createStory(uploadedUrl, 'Authentic moment shared ⚡');
+            const response = await api.post('/stories', {
+                mediaUrl: uploadedUrl,
+                media: mediaItem,
+                caption: 'Authentic moment shared ⚡'
+            });
             
-            setStories(prev => [response.story, ...prev]);
+            setStories(prev => [response.data.story || response.data, ...prev]);
             toast.success('Story published successfully!', { id: toastId });
         } catch (err) {
             console.error(err);

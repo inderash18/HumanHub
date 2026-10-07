@@ -10,6 +10,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { matchesMediaType } from '../utils/mediaSignature.js';
 import redis from '../config/redis.js';
 import MediaAnalysis from '../models/MediaAnalysis.js';
+import { uploadToCloudinary, isCloudinaryActive } from '../config/cloudinary.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,7 +29,7 @@ async function computeFileSha256(filePath) {
   });
 }
 
-// Authorized media delivery replacing unrestricted express.static
+// Authorized media delivery replacing unrestricted express.static (for local dev fallback)
 router.get('/:filename', optionalProtect, asyncHandler(async (req, res) => {
   const { filename } = req.params;
 
@@ -65,7 +66,7 @@ router.get('/:filename', optionalProtect, asyncHandler(async (req, res) => {
   return fs.createReadStream(filePath).pipe(res);
 }));
 
-// Upload handler
+// Upload handler supporting posts, stories, avatars, and general media
 router.post('/', protect, upload.any(), asyncHandler(async (req, res) => {
   const files = req.files || (req.file ? [req.file] : []);
   if (!files.length) return res.status(400).json({ message: 'No files uploaded' });
@@ -86,12 +87,49 @@ router.post('/', protect, upload.any(), asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Invalid media file. Upload a supported image or video.' });
   }
 
+  // Determine target Cloudinary folder based on request hints
+  const rawFolder = (req.query.folder || req.body.folder || 'posts').toLowerCase();
+  let targetFolder = 'humanhub/posts';
+  if (rawFolder === 'avatar' || rawFolder === 'avatars') {
+    targetFolder = 'humanhub/avatars';
+  } else if (rawFolder === 'story' || rawFolder === 'stories') {
+    targetFolder = 'humanhub/stories';
+  }
+
+  const mediaList = [];
   const urls = [];
   const mediaIds = [];
 
   for (const file of files) {
-    const mediaUrl = '/api/uploads/' + file.filename;
-    urls.push(mediaUrl);
+    let mediaObj = {
+      url: '/api/uploads/' + file.filename,
+      secure_url: '/api/uploads/' + file.filename,
+      publicId: '',
+      public_id: '',
+      provider: 'local',
+      resourceType: file.mimetype.startsWith('video/') ? 'video' : 'image',
+      format: path.extname(file.originalname).replace('.', '') || 'jpg',
+      bytes: file.size || 0,
+      width: 0,
+      height: 0
+    };
+
+    if (isCloudinaryActive()) {
+      try {
+        const cloudRes = await uploadToCloudinary(file.path, {
+          folder: targetFolder,
+          resource_type: 'auto'
+        });
+        if (cloudRes && cloudRes.secure_url) {
+          mediaObj = cloudRes;
+        }
+      } catch (cloudErr) {
+        console.warn('[Upload] Cloudinary upload deferred/failed, using local fallback:', cloudErr.message);
+      }
+    }
+
+    mediaList.push(mediaObj);
+    urls.push(mediaObj.url);
 
     // If image, automatically create & enqueue MediaAnalysis
     if (file.mimetype.startsWith('image/')) {
@@ -103,10 +141,15 @@ router.post('/', protect, upload.any(), asyncHandler(async (req, res) => {
         mediaId,
         mediaVersion: 1,
         owner: req.user._id,
-        mediaUrl,
+        mediaUrl: mediaObj.url,
         originalPath: file.path,
+        cloudinaryPublicId: mediaObj.publicId || '',
         fileHash,
         mimeType: file.mimetype,
+        dimensions: {
+          width: mediaObj.width || 0,
+          height: mediaObj.height || 0
+        },
         processingState: 'QUEUED',
         analysisOutcome: 'PENDING',
         publicationDecision: 'PENDING',
@@ -120,13 +163,20 @@ router.post('/', protect, upload.any(), asyncHandler(async (req, res) => {
         }
       });
 
-      try {
-        await redis.lpush(QUEUE_KEY, JSON.stringify({
-          id: String(analysis._id),
-          mediaId,
-          mediaVersion: 1
-        }));
-      } catch {}
+      if (redis) {
+        try {
+          await redis.lpush(QUEUE_KEY, JSON.stringify({
+            id: String(analysis._id),
+            mediaId,
+            mediaVersion: 1
+          }));
+        } catch {}
+      }
+    }
+
+    // In production with Cloudinary, cleanup local disk file
+    if (isCloudinaryActive() && process.env.NODE_ENV === 'production') {
+      unlink(file.path).catch(() => {});
     }
   }
 
@@ -137,15 +187,28 @@ router.post('/', protect, upload.any(), asyncHandler(async (req, res) => {
       .catch(() => {});
   });
 
+  const primaryMedia = mediaList[0] || {};
+
   res.status(201).json({ 
     success: true, 
-    message: 'Files uploaded', 
+    message: 'Files uploaded successfully', 
+    media: mediaList,
     urls, 
     mediaIds,
-    url: urls[0],
-    fileUrl: urls[0],
-    path: urls[0]
+    url: primaryMedia.url,
+    secure_url: primaryMedia.url,
+    public_id: primaryMedia.publicId,
+    publicId: primaryMedia.publicId,
+    resource_type: primaryMedia.resourceType,
+    resourceType: primaryMedia.resourceType,
+    format: primaryMedia.format,
+    bytes: primaryMedia.bytes,
+    width: primaryMedia.width,
+    height: primaryMedia.height,
+    fileUrl: primaryMedia.url,
+    path: primaryMedia.url
   });
 }));
 
 export default router;
+

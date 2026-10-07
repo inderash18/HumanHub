@@ -1,5 +1,16 @@
 import mongoose from 'mongoose';
 
+const mediaItemSchema = new mongoose.Schema({
+  url: { type: String, required: true },
+  publicId: { type: String, default: '' },
+  provider: { type: String, default: 'cloudinary' },
+  resourceType: { type: String, enum: ['image', 'video', 'raw', 'auto'], default: 'image' },
+  format: { type: String, default: '' },
+  bytes: { type: Number, default: 0 },
+  width: { type: Number, default: 0 },
+  height: { type: Number, default: 0 }
+}, { _id: false });
+
 const postSchema = new mongoose.Schema({
   caption: {
     type: String,
@@ -23,6 +34,7 @@ const postSchema = new mongoose.Schema({
     required: false,
     index: true
   },
+  media: [mediaItemSchema],
   mediaUrls: [{
     type: String
   }],

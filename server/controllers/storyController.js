@@ -9,6 +9,7 @@ import Notification from '../models/Notification.js';
 import MediaAnalysis from '../models/MediaAnalysis.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { getIO } from '../socket/socketHandler.js';
+import { deleteFromCloudinary } from '../config/cloudinary.js';
 
 /**
  * Helper to check whether viewer is authorized to view a given story
@@ -58,7 +59,10 @@ export const createStory = asyncHandler(async (req, res) => {
 
   const cleanMediaUrl = mediaUrl.trim().split('#')[0];
   const isVideo = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(cleanMediaUrl);
-  const isUploadPath = cleanMediaUrl.startsWith('/api/uploads/') || cleanMediaUrl.startsWith('/uploads/');
+  const isUploadPath = cleanMediaUrl.startsWith('/api/uploads/') || 
+                       cleanMediaUrl.startsWith('/uploads/') ||
+                       cleanMediaUrl.startsWith('https://res.cloudinary.com/') ||
+                       cleanMediaUrl.includes('cloudinary.com');
   if (!isVideo && isUploadPath && mongoose.connection.readyState === 1) {
     // Enforce MediaAnalysis check for uploaded image stories
     const analysis = await MediaAnalysis.findOne({
@@ -92,9 +96,21 @@ export const createStory = asyncHandler(async (req, res) => {
     }
   }
 
+  const mediaObj = req.body.media || {
+    url: cleanMediaUrl,
+    publicId: req.body.publicId || req.body.public_id || '',
+    provider: cleanMediaUrl.includes('cloudinary') ? 'cloudinary' : 'local',
+    resourceType: isVideo ? 'video' : 'image',
+    format: '',
+    bytes: 0,
+    width: 0,
+    height: 0
+  };
+
   // Authoritative server-side ownership assignment
   const story = await Story.create({
     author: req.user._id,
+    media: mediaObj,
     mediaUrl: cleanMediaUrl,
     mediaType: isVideo ? 'video' : 'image',
     caption: typeof caption === 'string' ? caption.trim().slice(0, 200) : '',
@@ -364,6 +380,10 @@ export const deleteStory = asyncHandler(async (req, res) => {
   if (!isOwner && !isPrivileged) {
     res.status(403);
     throw new Error('Unauthorized: you can only delete your own stories');
+  }
+
+  if (story.media && story.media.publicId) {
+    deleteFromCloudinary(story.media.publicId, story.media.resourceType || 'image').catch(() => {});
   }
 
   await Story.findByIdAndDelete(id);

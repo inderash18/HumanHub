@@ -9,7 +9,7 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 # Add current directory to path
@@ -126,7 +126,13 @@ def _run_full_analysis(image_bytes: bytes, content_type: str) -> AnalysisReport:
     # 5. Versioned decision policy synthesis & publication decision
     return decision_engine.evaluate(provenance_res, metadata_res, detector_res, google_res)
 
-@app.post("/analyze/image-origin", response_model=AnalysisReport)
+AI_SERVICE_SECRET = os.getenv("AI_SERVICE_SECRET")
+
+def verify_auth_header(x_internal_secret: Optional[str] = Header(None)):
+    if AI_SERVICE_SECRET and x_internal_secret != AI_SERVICE_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized: invalid or missing X-Internal-Secret header.")
+
+@app.post("/analyze/image-origin", response_model=AnalysisReport, dependencies=[Depends(verify_auth_header)])
 async def analyze_image_origin(
     file: UploadFile = File(...)
 ):

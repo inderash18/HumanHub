@@ -135,20 +135,22 @@ class UniversalFakeDetectAdapter(BaseDetector):
             self.fc_head.to(self.device)
             self.fc_head.eval()
 
-            # Attempt 1: Try open_clip ViT-L/14 if installed and reachable
+            # Primary: Load OpenAI CLIP ViT-L/14 via open_clip
             try:
                 import open_clip
                 model, _, _ = open_clip.create_model_and_transforms('ViT-L-14', pretrained='openai')
                 self.clip_model = model.visual.to(self.device)
                 self.clip_model.eval()
-                self._is_ready = True
                 self._backbone_type = "open_clip_vit_l14"
-                logger.info("UniversalFakeDetect loaded with open_clip on %s", self.device)
-                return True
+                if self._run_startup_selftest():
+                    self._is_ready = True
+                    logger.info("UniversalFakeDetect verified with open_clip ViT-L/14 on %s", self.device)
+                    return True
+                return False
             except Exception as e_openclip:
-                logger.info("open_clip not reachable (%s), trying local/transformers...", e_openclip)
+                logger.info("open_clip ViT-L/14 not loaded (%s), attempting transformers...", e_openclip)
 
-            # Attempt 2: Try transformers CLIPVisionModelWithProjection
+            # Secondary: Load OpenAI CLIP ViT-L/14 via transformers
             try:
                 from transformers import CLIPVisionModelWithProjection
                 local_clip_dir = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "clip-vit-large-patch14")
@@ -159,56 +161,83 @@ class UniversalFakeDetectAdapter(BaseDetector):
                     local_files_only=(os.getenv("TRANSFORMERS_OFFLINE", "0") == "1")
                 ).to(self.device)
                 self.clip_model.eval()
-                self._is_ready = True
                 self._backbone_type = "transformers_clip_vit_l14"
-                logger.info("UniversalFakeDetect loaded with transformers on %s", self.device)
-                return True
+                if self._run_startup_selftest():
+                    self._is_ready = True
+                    logger.info("UniversalFakeDetect verified with transformers CLIP ViT-L/14 on %s", self.device)
+                    return True
+                return False
             except Exception as e_trans:
-                logger.info("transformers CLIP not available (%s), initializing local vision backbone...", e_trans)
-
-            # Attempt 3: Local Offline Vision Feature Backbone with 768-dim projection
-            try:
-                import torchvision.models as models
-                
-                class LocalVisionFeatureExtractor(nn.Module):
-                    def __init__(self, out_features=768):
-                        super().__init__()
-                        base = models.mobilenet_v3_small(weights=None)
-                        self.features = base.features
-                        self.pool = nn.AdaptiveAvgPool2d((1, 1))
-                        self.proj = nn.Linear(576, out_features)
-
-                    def forward(self, x):
-                        x = self.features(x)
-                        x = self.pool(x)
-                        x = torch.flatten(x, 1)
-                        return self.proj(x)
-
-                local_backbone = LocalVisionFeatureExtractor(out_features=in_features).to(self.device)
-                local_backbone.eval()
-                self.clip_model = local_backbone
-                self._is_ready = True
-                self._backbone_type = "local_vision_backbone_768"
-                logger.info("UniversalFakeDetect loaded successfully with local vision backbone on %s", self.device)
-                return True
-            except Exception as e_local:
                 self.clip_model = None
-                self._load_error = f"Failed to initialize vision backbone: {e_local}"
-                logger.error(self._load_error)
+                self._load_error = f"CLIP ViT-L/14 backbone unavailable: {e_trans}"
+                logger.warning(self._load_error)
                 self._is_ready = False
                 return False
 
-        except ImportError:
-            # Fallback when torch is not installed on system (numpy vision feature projection)
-            logger.info("Torch not available in current environment. Using deterministic NumPy vision feature projection.")
-            self._is_ready = True
-            self._backbone_type = "numpy_vision_feature_projector"
-            self.clip_model = "numpy_vision_feature_projector"
-            self.fc_head = "numpy_fc_head"
-            return True
+        except ImportError as e_import:
+            self._load_error = f"Required ML dependencies (torch/transformers) not available: {e_import}"
+            logger.warning(self._load_error)
+            self._is_ready = False
+            return False
         except Exception as e:
             self._load_error = f"Failed to initialize UniversalFakeDetect: {str(e)}"
             logger.error(self._load_error)
+            self._is_ready = False
+            return False
+
+    def _run_startup_selftest(self) -> bool:
+        """Strict startup self-test verifying pipeline dimensions and compatibility.
+        Fails closed if preprocessing, embedding dimension (768), L2 normalization,
+        or classifier probe weights do not match the UnivFD specification."""
+        try:
+            import torch
+            from PIL import Image
+
+            if self.fc_head is None or not hasattr(self.fc_head, "in_features"):
+                raise ValueError("Classifier linear probe is not initialized.")
+            if self.fc_head.in_features != 768 or self.fc_head.out_features != 1:
+                raise ValueError(f"Classifier head dimension mismatch: expected (768, 1), got ({self.fc_head.in_features}, {self.fc_head.out_features})")
+
+            dummy_img = Image.new("RGB", (224, 224), color=(128, 128, 128))
+            tensor = self._preprocess_image(dummy_img)
+            if not isinstance(tensor, torch.Tensor) or tensor.shape != (1, 3, 224, 224):
+                raise ValueError(f"Preprocessed tensor shape mismatch: expected (1, 3, 224, 224), got {tensor.shape if isinstance(tensor, torch.Tensor) else type(tensor)}")
+
+            with torch.no_grad():
+                if hasattr(self.clip_model, "encode_image"):
+                    feats = self.clip_model.encode_image(tensor)
+                elif hasattr(self.clip_model, "forward"):
+                    out = self.clip_model(tensor)
+                    feats = out.image_embeds if hasattr(out, "image_embeds") else out
+                else:
+                    feats = self.clip_model(tensor)
+
+                if feats.dim() > 2:
+                    feats = feats.squeeze()
+                if feats.dim() == 1:
+                    feats = feats.unsqueeze(0)
+
+                if feats.shape != (1, 768):
+                    raise ValueError(f"Extracted CLIP visual embedding dimension mismatch: expected (1, 768), got {feats.shape}")
+
+                norm_feats = feats / (feats.norm(dim=-1, keepdim=True) + 1e-7)
+                norm_val = float(torch.norm(norm_feats, dim=-1).item())
+                if not (0.98 <= norm_val <= 1.02):
+                    raise ValueError(f"L2 normalization failed: expected ~1.0, got {norm_val}")
+
+                logit = self.fc_head(norm_feats)
+                if torch.isnan(logit).any() or torch.isinf(logit).any():
+                    raise ValueError("Classifier probe returned non-finite logit (NaN/Inf).")
+                score = float(torch.sigmoid(logit).item())
+                if not (0.0 <= score <= 1.0):
+                    raise ValueError(f"Classifier probe output {score} out of [0.0, 1.0].")
+
+            logger.info("UniversalFakeDetect startup self-test PASSED: CLIP ViT-L/14 (768-dim, normalized) verified.")
+            return True
+        except Exception as err:
+            self._load_error = f"Startup self-test failed: {str(err)}"
+            logger.error(self._load_error)
+            self.clip_model = None
             self._is_ready = False
             return False
 
@@ -231,20 +260,11 @@ class UniversalFakeDetectAdapter(BaseDetector):
         try:
             image = Image.open(io.BytesIO(image_bytes))
             
-            if self._backbone_type == "numpy_vision_feature_projector":
-                # Deterministic vision feature projection using NumPy
-                arr = np.array(image.convert("RGB").resize((224, 224), Image.BICUBIC), dtype=np.float32) / 255.0
-                mean_rgb = np.mean(arr, axis=(0, 1))
-                std_rgb = np.std(arr, axis=(0, 1))
-                variance = float(np.var(arr))
-                # Calibrated baseline projection based on natural camera color distribution
-                logit_val = float(-1.8 + 0.5 * float(mean_rgb[0]) + 0.2 * float(std_rgb[1]) - 0.1 * variance)
-                score_val = float(1.0 / (1.0 + np.exp(-logit_val)))
-            else:
-                import torch
-                tensor = self._preprocess_image(image)
+            image = Image.open(io.BytesIO(image_bytes))
+            import torch
+            tensor = self._preprocess_image(image)
 
-                with torch.no_grad():
+            with torch.no_grad():
                     if hasattr(self.clip_model, "encode_image"):
                         feats = self.clip_model.encode_image(tensor)
                     elif hasattr(self.clip_model, "forward"):

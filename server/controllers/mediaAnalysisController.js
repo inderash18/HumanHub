@@ -8,6 +8,7 @@ import MediaAnalysis from '../models/MediaAnalysis.js';
 import Post from '../models/Post.js';
 import { matchesMediaType } from '../utils/mediaSignature.js';
 import { getIO } from '../socket/socketHandler.js';
+import { uploadToCloudinary, isCloudinaryActive } from '../config/cloudinary.js';
 
 const QUEUE_KEY = 'media:analysis:queue';
 
@@ -55,7 +56,27 @@ export const uploadMediaAndEnqueueAnalysis = asyncHandler(async (req, res) => {
   // 2. Compute SHA-256 of unaltered bytes
   const fileHash = await computeFileSha256(file.path);
   const mediaId = crypto.randomUUID();
-  const mediaUrl = `/api/uploads/${file.filename}`;
+  let mediaUrl = `/api/uploads/${file.filename}`;
+  let cloudinaryPublicId = '';
+  let width = 0;
+  let height = 0;
+
+  if (isCloudinaryActive()) {
+    try {
+      const cloudRes = await uploadToCloudinary(file.path, {
+        folder: 'humanhub/posts',
+        resource_type: 'image'
+      });
+      if (cloudRes && cloudRes.secure_url) {
+        mediaUrl = cloudRes.secure_url;
+        cloudinaryPublicId = cloudRes.publicId;
+        width = cloudRes.width || 0;
+        height = cloudRes.height || 0;
+      }
+    } catch (cloudErr) {
+      console.warn('[MediaAnalysis] Cloudinary upload deferred/failed, using local storage:', cloudErr.message);
+    }
+  }
 
   // Check if identical content hash was previously analyzed with valid policy version
   const existingCompleted = await MediaAnalysis.findOne({
@@ -99,8 +120,10 @@ export const uploadMediaAndEnqueueAnalysis = asyncHandler(async (req, res) => {
     owner: req.user._id,
     mediaUrl,
     originalPath: file.path,
+    cloudinaryPublicId,
     fileHash,
     mimeType: file.mimetype,
+    dimensions: { width, height },
     processingState: initialProcessingState,
     analysisOutcome: initialOutcome,
     publicationDecision: initialDecision,
@@ -113,16 +136,22 @@ export const uploadMediaAndEnqueueAnalysis = asyncHandler(async (req, res) => {
     policyVersion: '2026.2'
   });
 
+  if (isCloudinaryActive() && process.env.NODE_ENV === 'production') {
+    fs.promises.unlink(file.path).catch(() => {});
+  }
+
   if (initialProcessingState === 'QUEUED') {
-    // 4. Enqueue into Redis for async analysis and trigger immediate worker tick
-    try {
-      await redis.lpush(QUEUE_KEY, JSON.stringify({
-        id: String(analysis._id),
-        mediaId,
-        mediaVersion: 1
-      }));
-    } catch (err) {
-      console.error('[MediaAnalysis] Redis enqueue failed:', err.message);
+    // 4. Enqueue into Redis if available; worker automatically claims from MongoDB
+    if (redis) {
+      try {
+        await redis.lpush(QUEUE_KEY, JSON.stringify({
+          id: String(analysis._id),
+          mediaId,
+          mediaVersion: 1
+        }));
+      } catch (err) {
+        console.error('[MediaAnalysis] Redis enqueue failed:', err.message);
+      }
     }
 
     // Trigger worker processing immediately
@@ -258,14 +287,16 @@ export const retryMediaAnalysis = asyncHandler(async (req, res) => {
   };
   await analysis.save();
 
-  try {
-    await redis.lpush(QUEUE_KEY, JSON.stringify({
-      id: String(analysis._id),
-      mediaId: analysis.mediaId,
-      mediaVersion: analysis.mediaVersion
-    }));
-  } catch (err) {
-    console.error('[MediaAnalysis] Redis retry enqueue failed:', err.message);
+  if (redis) {
+    try {
+      await redis.lpush(QUEUE_KEY, JSON.stringify({
+        id: String(analysis._id),
+        mediaId: analysis.mediaId,
+        mediaVersion: analysis.mediaVersion
+      }));
+    } catch (err) {
+      console.error('[MediaAnalysis] Redis retry enqueue failed:', err.message);
+    }
   }
 
   // Trigger worker processing immediately

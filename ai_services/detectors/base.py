@@ -1,16 +1,16 @@
 """Base Detector Interface."""
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 class DetectorResult(BaseModel):
-    model_name: str
-    version: str
-    checkpoint_identifier: str
+    model_name: str = "UniversalFakeDetect"
+    version: str = "1.0.0"
+    checkpoint_identifier: str = "univfd_clip_vit_l14"
     checkpoint_sha256: Optional[str] = None
-    preprocessing_version: str
-    supported_formats: list[str] = Field(default_factory=lambda: ["image/jpeg", "image/png", "image/webp"])
-    device: str
+    preprocessing_version: str = "clip_bicubic_224_norm"
+    supported_formats: List[str] = Field(default_factory=lambda: ["image/jpeg", "image/png", "image/webp"])
+    device: str = "cpu"
     raw_score: Optional[float] = None
     logit: Optional[float] = None
     is_synthetic: Optional[bool] = None

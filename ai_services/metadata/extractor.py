@@ -1,7 +1,7 @@
 """Metadata Extractor Engine (EXIF, XMP, IPTC, PNG text).
 
-Extracts camera, software, and creation information while strictly scrubbing
-private fields (GPS, serial numbers, personal identifiers) and raw generation prompts.
+Extracts camera, software, IPTC DigitalSourceType, and creation information while strictly
+scrubbing private fields (GPS, serial numbers, personal identifiers) and raw generation prompts.
 """
 import io
 import re
@@ -41,6 +41,8 @@ class SanitizedMetadata(BaseModel):
     # AI Generation clues in unsigned metadata
     ai_generation_software_detected: Optional[str] = None
     has_ai_generation_parameters: bool = False
+    is_google_ai_metadata_detected: bool = False
+    digital_source_type: Optional[str] = None
     
     # Sanitization indicator
     gps_scrubbed: bool = False
@@ -51,6 +53,7 @@ class SanitizedMetadata(BaseModel):
 class MetadataExtractor:
     # Known AI generation software strings in metadata
     AI_SOFTWARE_SIGNATURES = [
+        (re.compile(r"google imagefx|imagen|gemini", re.I), "Google AI (Gemini/Imagen/ImageFX)"),
         (re.compile(r"midjourney", re.I), "Midjourney"),
         (re.compile(r"stable diffusion|automatic1111|comfyui|invokeai|webui", re.I), "Stable Diffusion"),
         (re.compile(r"dall[\-e\s]*[23]", re.I), "DALL-E"),
@@ -120,24 +123,30 @@ class MetadataExtractor:
                 except Exception:
                     pass
 
-            # 2. Process PNG text chunks / info dictionary (e.g. Stable Diffusion parameters)
+            # 2. Process XMP / IPTC / PNG text chunks
+            raw_text_scan = ""
             if hasattr(image, "info") and isinstance(image.info, dict):
                 info = image.info
                 # Check for XMP
                 if "XML:com.adobe.xmp" in info or "xmp" in info:
                     result.has_xmp = True
                     xmp_str = str(info.get("XML:com.adobe.xmp") or info.get("xmp", ""))
-                    for pattern, label in self.AI_SOFTWARE_SIGNATURES:
-                        if pattern.search(xmp_str):
-                            result.ai_generation_software_detected = label
-                            result.has_ai_generation_parameters = True
-                            break
+                    raw_text_scan += " " + xmp_str
+                    
+                    # Check for IPTC DigitalSourceType
+                    if "compositeSynthetic" in xmp_str or "trainedAlgorithmicMedia" in xmp_str:
+                        result.has_iptc = True
+                        result.digital_source_type = "trainedAlgorithmicMedia / synthetic"
+                        result.has_ai_generation_parameters = True
+                        if "google" in xmp_str.lower() or "gemini" in xmp_str.lower():
+                            result.is_google_ai_metadata_detected = True
+                            result.ai_generation_software_detected = "Google AI (Metadata Assertion)"
 
-                # Check for SD / ComfyUI / NovelAI parameter blocks specifically
+                # Check for SD / ComfyUI / NovelAI parameter blocks
                 for key in ("parameters", "prompt", "workflow", "Comment", "Description"):
                     if key in info and isinstance(info[key], str):
                         val = info[key]
-                        # Look for definitive generative parameter signatures
+                        raw_text_scan += " " + val
                         if (
                             "Steps:" in val and "Sampler:" in val
                         ) or (
@@ -150,15 +159,17 @@ class MetadataExtractor:
                                 result.ai_generation_software_detected = "Generative AI Tool (Parameters Header)"
                             break
 
-                # Check software tag in info
                 if "Software" in info and isinstance(info["Software"], str) and not result.software:
                     result.software = info["Software"][:128]
 
-            # 3. Check software string against known AI software signatures
-            if result.software and not result.ai_generation_software_detected:
+            # 3. Check combined software and metadata strings
+            search_str = f"{result.software or ''} {raw_text_scan}".strip()
+            if search_str:
                 for pattern, label in self.AI_SOFTWARE_SIGNATURES:
-                    if pattern.search(result.software):
+                    if pattern.search(search_str):
                         result.ai_generation_software_detected = label
+                        if "Google" in label:
+                            result.is_google_ai_metadata_detected = True
                         break
 
         except Exception as e:

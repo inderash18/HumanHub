@@ -19,22 +19,38 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchFeed();
-    if (isAuthenticated) {
-      fetchSuggestedUsers();
-    }
+    let isMounted = true;
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        const requests = [api.get('/posts')];
+        if (isAuthenticated) {
+          requests.push(api.get('/users/suggestions').catch(() => ({ data: [] })));
+        }
+        const [postsRes, suggestionsRes] = await Promise.all(requests);
+        if (!isMounted) return;
+
+        const feedData = postsRes.data?.data || postsRes.data?.posts || postsRes.data || [];
+        setPosts(Array.isArray(feedData) ? feedData : []);
+
+        if (suggestionsRes?.data) {
+          const sugData = Array.isArray(suggestionsRes.data) ? suggestionsRes.data : [];
+          setSuggestedUsers(sugData);
+        }
+      } catch (err) {
+        if (isMounted) setPosts([]);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadInitialData();
+    return () => { isMounted = false; };
   }, [isAuthenticated]);
 
-  const fetchFeed = async () => {
-    try {
-      setLoading(true);
-      const res = await api.get('/posts');
-      const data = res.data?.data || res.data?.posts || res.data || [];
-      setPosts(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setPosts([]);
-    } finally {
-      setLoading(false);
+  const handlePostDeleted = (deletedPostId) => {
+    if (deletedPostId) {
+      setPosts(prev => prev.filter(p => p._id !== deletedPostId));
     }
   };
 
@@ -78,7 +94,7 @@ export default function FeedPage() {
                 <PostCard 
                   key={post._id} 
                   post={post} 
-                  onUpdate={fetchFeed} 
+                  onUpdate={handlePostDeleted} 
                 />
               ))}
             </div>

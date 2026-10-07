@@ -57,7 +57,42 @@ export const uploadMediaAndEnqueueAnalysis = asyncHandler(async (req, res) => {
   const mediaId = crypto.randomUUID();
   const mediaUrl = `/api/uploads/${file.filename}`;
 
-  // 3. Create MediaAnalysis record (Initial State: QUEUED)
+  // Check if identical content hash was previously analyzed with valid policy version
+  const existingCompleted = await MediaAnalysis.findOne({
+    fileHash,
+    processingState: 'COMPLETED',
+    policyVersion: '2026.2'
+  }).sort({ createdAt: -1 }).lean();
+
+  let initialProcessingState = 'QUEUED';
+  let initialOutcome = 'PENDING';
+  let initialDecision = 'PENDING';
+  let initialReason = 'Checking image before publishing...';
+  let initialEvidence = {
+    badgeLabel: 'Checking image before publishing...',
+    badgeVariant: 'neutral',
+    primaryExplanation: 'Origin verification and Content Credentials inspection in progress.',
+    detailedPoints: ['Extracting image metadata and analyzing pixel structures...'],
+    limitations: ['Automated checks are processing in the background.']
+  };
+  let googleAiDetection = undefined;
+  let provenance = undefined;
+  let metadata = undefined;
+  let detector = undefined;
+
+  if (existingCompleted) {
+    initialProcessingState = 'COMPLETED';
+    initialOutcome = existingCompleted.analysisOutcome;
+    initialDecision = existingCompleted.publicationDecision;
+    initialReason = existingCompleted.decisionReason;
+    initialEvidence = existingCompleted.evidence;
+    googleAiDetection = existingCompleted.googleAiDetection;
+    provenance = existingCompleted.provenance;
+    metadata = existingCompleted.metadata;
+    detector = existingCompleted.detector;
+  }
+
+  // 3. Create MediaAnalysis record
   const analysis = await MediaAnalysis.create({
     mediaId,
     mediaVersion: 1,
@@ -66,34 +101,37 @@ export const uploadMediaAndEnqueueAnalysis = asyncHandler(async (req, res) => {
     originalPath: file.path,
     fileHash,
     mimeType: file.mimetype,
-    processingState: 'QUEUED',
-    analysisOutcome: 'PENDING',
-    evidence: {
-      badgeLabel: 'Checking image...',
-      badgeVariant: 'neutral',
-      primaryExplanation: 'Origin verification and Content Credentials inspection in progress.',
-      detailedPoints: ['Extracting image metadata and analyzing pixel structures...'],
-      limitations: ['Automated checks are processing in the background.']
+    processingState: initialProcessingState,
+    analysisOutcome: initialOutcome,
+    publicationDecision: initialDecision,
+    decisionReason: initialReason,
+    evidence: initialEvidence,
+    googleAiDetection,
+    provenance,
+    metadata,
+    detector,
+    policyVersion: '2026.2'
+  });
+
+  if (initialProcessingState === 'QUEUED') {
+    // 4. Enqueue into Redis for async analysis and trigger immediate worker tick
+    try {
+      await redis.lpush(QUEUE_KEY, JSON.stringify({
+        id: String(analysis._id),
+        mediaId,
+        mediaVersion: 1
+      }));
+    } catch (err) {
+      console.error('[MediaAnalysis] Redis enqueue failed:', err.message);
     }
-  });
 
-  // 4. Enqueue into Redis for async analysis and trigger immediate worker tick
-  try {
-    await redis.lpush(QUEUE_KEY, JSON.stringify({
-      id: String(analysis._id),
-      mediaId,
-      mediaVersion: 1
-    }));
-  } catch (err) {
-    console.error('[MediaAnalysis] Redis enqueue failed:', err.message);
+    // Trigger worker processing immediately
+    setImmediate(() => {
+      import('../workers/mediaAnalysisWorker.js')
+        .then(m => m.processAnalysisJob())
+        .catch(e => console.error('[MediaAnalysis] Immediate processing error:', e.message));
+    });
   }
-
-  // Trigger worker processing immediately (handles both Redis and DB fallback)
-  setImmediate(() => {
-    import('../workers/mediaAnalysisWorker.js')
-      .then(m => m.processAnalysisJob())
-      .catch(e => console.error('[MediaAnalysis] Immediate processing error:', e.message));
-  });
 
   res.status(201).json({
     success: true,
@@ -101,9 +139,12 @@ export const uploadMediaAndEnqueueAnalysis = asyncHandler(async (req, res) => {
     mediaVersion: 1,
     url: mediaUrl,
     fileHash,
-    processingState: 'QUEUED',
-    analysisOutcome: 'PENDING',
-    evidence: analysis.evidence
+    processingState: analysis.processingState,
+    analysisOutcome: analysis.analysisOutcome,
+    publicationDecision: analysis.publicationDecision,
+    decisionReason: analysis.decisionReason,
+    evidence: analysis.evidence,
+    googleAiDetection: analysis.googleAiDetection
   });
 });
 
@@ -125,13 +166,16 @@ export const getMediaAnalysis = asyncHandler(async (req, res) => {
     ['admin', 'moderator'].includes(req.user.role)
   );
 
-  // Public sanitized response (privacy protected)
+  // Public sanitized response
   const publicReport = {
     mediaId: analysis.mediaId,
     mediaVersion: analysis.mediaVersion,
     mediaUrl: analysis.mediaUrl,
     processingState: analysis.processingState,
     analysisOutcome: analysis.analysisOutcome,
+    publicationDecision: analysis.publicationDecision,
+    decisionReason: analysis.decisionReason,
+    googleAiDetection: analysis.googleAiDetection,
     policyVersion: analysis.policyVersion,
     evidence: analysis.evidence,
     provenance: {
@@ -142,8 +186,11 @@ export const getMediaAnalysis = asyncHandler(async (req, res) => {
       signerName: analysis.provenance?.signerName,
       isAiOriginAsserted: analysis.provenance?.isAiOriginAsserted,
       isAiEditingAsserted: analysis.provenance?.isAiEditingAsserted,
+      isGoogleAiOriginAsserted: analysis.provenance?.isGoogleAiOriginAsserted,
+      isGoogleAiEditingAsserted: analysis.provenance?.isGoogleAiEditingAsserted,
       isCameraCaptureAsserted: analysis.provenance?.isCameraCaptureAsserted,
-      aiToolsMentioned: analysis.provenance?.aiToolsMentioned
+      aiToolsMentioned: analysis.provenance?.aiToolsMentioned,
+      googleToolsMentioned: analysis.provenance?.googleToolsMentioned
     },
     metadata: {
       cameraMake: analysis.metadata?.cameraMake,
@@ -153,6 +200,7 @@ export const getMediaAnalysis = asyncHandler(async (req, res) => {
       creationDate: analysis.metadata?.creationDate,
       colorSpace: analysis.metadata?.colorSpace,
       hasAiGenerationParameters: analysis.metadata?.hasAiGenerationParameters,
+      isGoogleAiMetadataDetected: analysis.metadata?.isGoogleAiMetadataDetected,
       aiGenerationSoftwareDetected: analysis.metadata?.aiGenerationSoftwareDetected
     },
     reviewRequest: {
@@ -161,7 +209,6 @@ export const getMediaAnalysis = asyncHandler(async (req, res) => {
     }
   };
 
-  // Add internal diagnostic fields for owner/moderator
   if (isPrivileged) {
     publicReport.diagnostics = {
       fileHash: analysis.fileHash,
@@ -178,7 +225,7 @@ export const getMediaAnalysis = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Retry analysis for a failed media item
+ * @desc    Retry analysis for a failed or held media item
  * @route   POST /api/v1/media/:mediaId/analysis/retry
  * @access  Private (Owner / Moderator only)
  */
@@ -196,12 +243,14 @@ export const retryMediaAnalysis = asyncHandler(async (req, res) => {
 
   analysis.processingState = 'QUEUED';
   analysis.analysisOutcome = 'PENDING';
+  analysis.publicationDecision = 'PENDING';
+  analysis.decisionReason = 'Analysis re-enqueued for retry.';
   analysis.policyVersion = '2026.2';
   analysis.retryCount = 0;
   analysis.errorCode = '';
   analysis.error = '';
   analysis.evidence = {
-    badgeLabel: 'Checking image...',
+    badgeLabel: 'Checking image before publishing...',
     badgeVariant: 'neutral',
     primaryExplanation: 'Analysis re-enqueued.',
     detailedPoints: ['Retrying detector and provenance validation...'],
@@ -226,7 +275,7 @@ export const retryMediaAnalysis = asyncHandler(async (req, res) => {
       .catch(e => console.error('[MediaAnalysis] Immediate retry processing error:', e.message));
   });
 
-  res.json({ success: true, message: 'Analysis re-enqueued successfully', processingState: 'QUEUED' });
+  res.json({ success: true, message: 'Analysis re-enqueued successfully', processingState: 'QUEUED', publicationDecision: 'PENDING' });
 });
 
 /**
@@ -247,6 +296,10 @@ export const requestMediaReview = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: 'Media analysis not found' });
   }
 
+  if (String(analysis.owner) !== String(req.user._id) && !['admin', 'moderator'].includes(req.user.role)) {
+    return res.status(403).json({ success: false, message: 'Not authorized to request review for this media' });
+  }
+
   if (analysis.reviewRequest?.status === 'pending') {
     return res.status(400).json({ success: false, message: 'A review request is already pending for this media' });
   }
@@ -256,7 +309,8 @@ export const requestMediaReview = asyncHandler(async (req, res) => {
     requestedBy: req.user._id,
     reason: reason.trim().slice(0, 1000),
     requestedAt: new Date(),
-    originalOutcome: analysis.analysisOutcome
+    originalOutcome: analysis.analysisOutcome,
+    originalDecision: analysis.publicationDecision
   };
 
   await analysis.save();
@@ -309,17 +363,23 @@ export const resolveMediaReview = asyncHandler(async (req, res) => {
 
   if (decision === 'override_authentic') {
     analysis.analysisOutcome = 'NO_STRONG_AI_SIGNALS';
+    analysis.publicationDecision = 'ALLOWED';
+    analysis.decisionReason = `Human moderator resolution (${req.user.username}): Authentic capture confirmed.`;
     analysis.evidence.badgeLabel = 'Human Verified (Dispute Resolved)';
     analysis.evidence.badgeVariant = 'verified';
     analysis.evidence.primaryExplanation = 'A human moderator reviewed and verified the authentic provenance of this image.';
-    analysis.evidence.detailedPoints.push(`Moderator resolution (${req.user.username}): Authentic capture confirmed.`);
+    analysis.evidence.detailedPoints.push(`Moderator resolution (${req.user.username}): Approved for publishing.`);
   } else if (decision === 'confirm_ai') {
-    analysis.analysisOutcome = 'LIKELY_AI_GENERATED';
-    analysis.evidence.badgeLabel = 'Likely AI-generated (Moderator Confirmed)';
+    analysis.analysisOutcome = 'AI_ORIGIN_DOCUMENTED';
+    analysis.publicationDecision = 'BLOCKED';
+    analysis.decisionReason = `Human moderator review (${req.user.username}) confirmed AI generation. Publishing blocked.`;
+    analysis.evidence.badgeLabel = 'AI generation (Moderator Confirmed)';
     analysis.evidence.badgeVariant = 'warning';
     analysis.evidence.primaryExplanation = 'Human moderator review confirmed synthetic/AI generation markers.';
   } else if (decision === 'mark_inconclusive') {
     analysis.analysisOutcome = 'INCONCLUSIVE';
+    analysis.publicationDecision = 'HELD_FOR_REVIEW';
+    analysis.decisionReason = `Moderator review (${req.user.username}): Inconclusive evidence. Remains held.`;
     analysis.evidence.badgeLabel = 'Inconclusive (Under Review)';
     analysis.evidence.badgeVariant = 'neutral';
     analysis.evidence.primaryExplanation = 'Disputed signals reviewed by moderation team and classified as inconclusive.';
@@ -332,6 +392,15 @@ export const resolveMediaReview = asyncHandler(async (req, res) => {
 
   await analysis.save();
 
+  // If associated with a post, update post status if needed
+  if (analysis.post) {
+    if (analysis.publicationDecision === 'ALLOWED') {
+      await Post.findByIdAndUpdate(analysis.post, { status: 'published', moderationError: '' });
+    } else if (analysis.publicationDecision === 'BLOCKED') {
+      await Post.findByIdAndUpdate(analysis.post, { status: 'blocked', moderationError: analysis.decisionReason });
+    }
+  }
+
   // Broadcast update
   const io = getIO();
   if (io) {
@@ -339,6 +408,8 @@ export const resolveMediaReview = asyncHandler(async (req, res) => {
       mediaId: analysis.mediaId,
       mediaVersion: analysis.mediaVersion,
       analysisOutcome: analysis.analysisOutcome,
+      publicationDecision: analysis.publicationDecision,
+      decisionReason: analysis.decisionReason,
       evidence: analysis.evidence,
       processingState: analysis.processingState
     });

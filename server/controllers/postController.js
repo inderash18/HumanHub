@@ -16,21 +16,67 @@ import { canViewPost, canDeletePost } from '../policies/authorization.js';
 // @route   POST /api/posts
 // @access  Private
 export const createPost = asyncHandler(async (req, res) => {
-  const { caption, body, communityId, mediaUrls, mediaIds, tags } = req.body;
+  const { caption, body, title, communityId, mediaUrls, mediaIds, tags } = req.body;
 
-  const contentText = (caption || body || '').trim();
+  const contentText = (caption || body || title || '').trim();
   const rawMediaList = Array.isArray(mediaUrls) ? mediaUrls : (mediaUrls ? [mediaUrls] : []);
 
   // Validate that media URLs are relative uploaded paths and not malicious remote URLs
   const mediaList = rawMediaList.filter(url => {
     if (typeof url !== 'string') return false;
-    const clean = url.trim();
+    const clean = url.trim().split('#')[0]; // Strip URL hash fragments
     return clean.startsWith('/api/uploads/') || clean.startsWith('/uploads/');
-  });
+  }).map(url => url.trim().split('#')[0]);
 
   if (!contentText && mediaList.length === 0) {
     res.status(400);
     throw new Error('Please provide text or media for your post');
+  }
+
+  // Strict Server-Enforced Media Validation & Origin Gate
+  let analysisDocIds = [];
+  if (mediaList.length > 0) {
+    for (const url of mediaList) {
+      // Find matching MediaAnalysis record
+      const analysis = await MediaAnalysis.findOne({
+        mediaUrl: url,
+        owner: req.user._id
+      }).sort({ mediaVersion: -1 });
+
+      if (!analysis) {
+        res.status(400);
+        throw new Error(`Unverified media file: "${url}". All images must be uploaded and verified through the authenticated media pipeline.`);
+      }
+
+      // Check ownership
+      if (String(analysis.owner) !== String(req.user._id)) {
+        res.status(403);
+        throw new Error('Unauthorized: You do not own this media record.');
+      }
+
+      // Verify server publication decision
+      if (analysis.publicationDecision === 'BLOCKED') {
+        res.status(403);
+        throw new Error(`Publication blocked: ${analysis.decisionReason || 'AI-generated or generatively edited media detected.'}`);
+      }
+
+      if (analysis.publicationDecision === 'HELD_FOR_REVIEW') {
+        res.status(403);
+        throw new Error(`Publication held: This image needs review before publishing. (${analysis.decisionReason || 'Held for moderator review.'})`);
+      }
+
+      if (analysis.publicationDecision === 'PENDING' || analysis.processingState === 'QUEUED' || analysis.processingState === 'RUNNING') {
+        res.status(422);
+        throw new Error('Media verification is still in progress. Please wait for checks to complete before publishing.');
+      }
+
+      if (analysis.publicationDecision !== 'ALLOWED') {
+        res.status(403);
+        throw new Error(`Media not approved for publishing. Status: ${analysis.publicationDecision}. Reason: ${analysis.decisionReason}`);
+      }
+
+      analysisDocIds.push(analysis._id);
+    }
   }
 
   let assignedCommunity = null;
@@ -46,28 +92,16 @@ export const createPost = asyncHandler(async (req, res) => {
   // Extract hashtags if present
   const extractedTags = tags || (contentText.match(/#[a-zA-Z0-9_]+/g) || []).map(t => t.slice(1).toLowerCase());
 
-  // Determine media type
+  // Determine media type and status
   let mediaType = 'text';
+  let postStatus = 'published';
+  let moderationError = '';
+
   if (mediaList.length > 0) {
     const isVideo = mediaList.some(url => url.endsWith('.mp4') || url.endsWith('.webm'));
     mediaType = isVideo ? 'video' : 'image';
-  }
-
-  // Find associated MediaAnalysis records if mediaIds or mediaUrls provided (ensuring owner authorization)
-  let analysisDocIds = [];
-  if (Array.isArray(mediaIds) && mediaIds.length > 0) {
-    const validMediaIds = mediaIds.filter(id => typeof id === 'string' && /^[a-zA-Z0-9_\-\.]+$/.test(id));
-    const analysisDocs = await MediaAnalysis.find({
-      mediaId: { $in: validMediaIds },
-      $or: [{ owner: req.user._id }, { owner: null }]
-    });
-    analysisDocIds = analysisDocs.map(d => d._id);
-  } else if (mediaList.length > 0) {
-    const analysisDocs = await MediaAnalysis.find({
-      mediaUrl: { $in: mediaList },
-      $or: [{ owner: req.user._id }, { owner: null }]
-    });
-    analysisDocIds = analysisDocs.map(d => d._id);
+  } else {
+    postStatus = 'pending_review';
   }
 
   const post = await Post.create({
@@ -79,21 +113,24 @@ export const createPost = asyncHandler(async (req, res) => {
     mediaAnalysis: analysisDocIds,
     mediaType,
     tags: extractedTags,
-    status: 'pending_review'
+    status: postStatus
   });
 
-  try {
-    await redis.lpush('moderation:queue', JSON.stringify({ postId: String(post._id) }));
-  } catch {
-    post.moderationError = 'Automatic detection unavailable. Awaiting moderator review.';
-    await post.save();
+  if (mediaList.length === 0) {
+    try {
+      await redis.lpush('moderation:queue', JSON.stringify({ postId: String(post._id), text: contentText }));
+    } catch (err) {
+      moderationError = 'Queue unavailable. Post preserved for manual moderator review.';
+      post.moderationError = moderationError;
+      await post.save().catch(() => {});
+    }
   }
 
   // Link Post ID back to MediaAnalysis documents
   if (analysisDocIds.length > 0) {
     await MediaAnalysis.updateMany(
       { _id: { $in: analysisDocIds } },
-      { $set: { post: post._id, owner: req.user._id } }
+      { $set: { post: post._id } }
     );
   }
 
@@ -105,14 +142,17 @@ export const createPost = asyncHandler(async (req, res) => {
     .populate('community', 'name slug icon')
     .populate('mediaAnalysis');
 
+  const postObj = populatedPost ? (populatedPost.toObject ? populatedPost.toObject() : populatedPost) : post.toObject();
+
   res.status(201).json({
     success: true,
     post: {
-      ...populatedPost.toObject(),
+      ...postObj,
+      moderationError: moderationError || postObj.moderationError || '',
       hasLiked: false,
       isSaved: false
     },
-    message: 'Post submitted for review'
+    message: postStatus === 'published' ? 'Post published successfully' : 'Post submitted for review'
   });
 });
 

@@ -52,34 +52,75 @@ export async function processAnalysisJob() {
     analysis.processingState = 'RUNNING';
     await analysis.save();
 
-    if (!fs.existsSync(analysis.originalPath)) {
-      throw new Error(`Original media file not found at ${analysis.originalPath}`);
+    // Check if an existing completed analysis exists for this exact fileHash
+    const existingAnalysis = await MediaAnalysis.findOne({
+      fileHash: analysis.fileHash,
+      processingState: 'COMPLETED',
+      policyVersion: '2026.2',
+      _id: { $ne: analysis._id }
+    }).sort({ createdAt: -1 }).lean();
+
+    let report;
+    if (existingAnalysis) {
+      report = {
+        outcome: existingAnalysis.analysisOutcome,
+        publication_decision: existingAnalysis.publicationDecision,
+        decision_reason: existingAnalysis.decisionReason,
+        policy_version: existingAnalysis.policyVersion,
+        google_ai_detection: existingAnalysis.googleAiDetection,
+        provenance: existingAnalysis.provenance,
+        metadata: existingAnalysis.metadata,
+        detector: existingAnalysis.detector,
+        evidence: existingAnalysis.evidence
+      };
+    } else {
+      if (!fs.existsSync(analysis.originalPath)) {
+        throw new Error(`Original media file not found at ${analysis.originalPath}`);
+      }
+
+      // Prepare multipart form with unaltered original image bytes
+      const form = new FormData();
+      form.append('file', fs.createReadStream(analysis.originalPath), {
+        filename: `${analysis.mediaId}.jpg`,
+        contentType: analysis.mimeType || 'image/jpeg'
+      });
+
+      const response = await axios.post(`${AI_SERVICE_URL}/analyze/image-origin`, form, {
+        headers: {
+          ...form.getHeaders()
+        },
+        timeout: 30000,
+        maxContentLength: 50 * 1024 * 1024,
+        maxBodyLength: 50 * 1024 * 1024
+      });
+
+      report = response.data;
     }
-
-    // Prepare multipart form with unaltered original image bytes
-    const form = new FormData();
-    form.append('file', fs.createReadStream(analysis.originalPath), {
-      filename: `${analysis.mediaId}.jpg`,
-      contentType: analysis.mimeType || 'image/jpeg'
-    });
-
-    const response = await axios.post(`${AI_SERVICE_URL}/analyze/image-origin`, form, {
-      headers: {
-        ...form.getHeaders()
-      },
-      timeout: 30000,
-      maxContentLength: 50 * 1024 * 1024,
-      maxBodyLength: 50 * 1024 * 1024
-    });
-
-    const report = response.data;
 
     // Map response to MediaAnalysis fields
     analysis.processingState = 'COMPLETED';
     analysis.analysisOutcome = report.outcome || 'INCONCLUSIVE';
+    analysis.publicationDecision = report.publication_decision || 'HELD_FOR_REVIEW';
+    analysis.decisionReason = report.decision_reason || 'Analysis complete.';
     analysis.policyVersion = report.policy_version || '2026.2';
     analysis.errorCode = '';
     analysis.error = '';
+
+    if (report.google_ai_detection) {
+      analysis.googleAiDetection = {
+        status: report.google_ai_detection.status || 'NOT_CONFIGURED',
+        provider: report.google_ai_detection.provider || 'Google Cloud SynthID API',
+        watermarkDetected: report.google_ai_detection.watermark_detected,
+        aiOriginAsserted: Boolean(report.google_ai_detection.ai_origin_asserted),
+        aiEditingAsserted: Boolean(report.google_ai_detection.ai_editing_asserted),
+        toolsMentioned: report.google_ai_detection.tools_mentioned || [],
+        evidenceSource: report.google_ai_detection.evidence_source || 'none',
+        providerRequestId: report.google_ai_detection.provider_request_id || null,
+        errorMessage: report.google_ai_detection.error_message || null,
+        limitations: report.google_ai_detection.limitations || [],
+        latencyMs: report.google_ai_detection.latency_ms || 0
+      };
+    }
 
     if (report.provenance) {
       analysis.provenance = {
@@ -93,6 +134,9 @@ export async function processAnalysisJob() {
         isAiOriginAsserted: Boolean(report.provenance.is_ai_origin_asserted),
         isAiEditingAsserted: Boolean(report.provenance.is_ai_editing_asserted),
         isCameraCaptureAsserted: Boolean(report.provenance.is_camera_capture_asserted),
+        isGoogleAiOriginAsserted: Boolean(report.provenance.is_google_ai_origin_asserted),
+        isGoogleAiEditingAsserted: Boolean(report.provenance.is_google_ai_editing_asserted),
+        googleToolsMentioned: report.provenance.google_tools_mentioned || [],
         aiToolsMentioned: report.provenance.ai_tools_mentioned || [],
         actions: report.provenance.actions || [],
         validationErrors: report.provenance.validation_errors || [],
@@ -113,6 +157,8 @@ export async function processAnalysisJob() {
         colorSpace: report.metadata.color_space,
         aiGenerationSoftwareDetected: report.metadata.ai_generation_software_detected,
         hasAiGenerationParameters: Boolean(report.metadata.has_ai_generation_parameters),
+        isGoogleAiMetadataDetected: Boolean(report.metadata.is_google_ai_metadata_detected),
+        digitalSourceType: report.metadata.digital_source_type,
         latencyMs: report.metadata.latency_ms || 0
       };
       if (report.metadata.width && report.metadata.height) {
@@ -164,6 +210,9 @@ export async function processAnalysisJob() {
         mediaUrl: analysis.mediaUrl,
         processingState: analysis.processingState,
         analysisOutcome: analysis.analysisOutcome,
+        publicationDecision: analysis.publicationDecision,
+        decisionReason: analysis.decisionReason,
+        googleAiDetection: analysis.googleAiDetection,
         policyVersion: analysis.policyVersion,
         errorCode: analysis.errorCode,
         evidence: analysis.evidence,
@@ -179,7 +228,7 @@ export async function processAnalysisJob() {
       io.emit('media:analysis:updated', payload);
     }
 
-    console.log(`[MediaAnalysisWorker] Job completed for media ${analysis.mediaId} -> Outcome: ${analysis.analysisOutcome} (Policy: ${analysis.policyVersion})`);
+    console.log(`[MediaAnalysisWorker] Job completed for media ${analysis.mediaId} -> Outcome: ${analysis.analysisOutcome} | Decision: ${analysis.publicationDecision} (${analysis.decisionReason})`);
 
   } catch (error) {
     let errorCode = 'INFERENCE_FAILED';
@@ -213,6 +262,8 @@ export async function processAnalysisJob() {
         if (analysis.retryCount >= MAX_RETRIES) {
           analysis.processingState = 'FAILED';
           analysis.analysisOutcome = 'CHECK_UNAVAILABLE';
+          analysis.publicationDecision = 'HELD_FOR_REVIEW';
+          analysis.decisionReason = 'Automated check unavailable after multiple retries. Held for manual review or author retry.';
           analysis.policyVersion = '2026.2';
           analysis.errorCode = errorCode;
           analysis.error = error.message;
@@ -233,13 +284,15 @@ export async function processAnalysisJob() {
               mediaUrl: analysis.mediaUrl,
               processingState: 'FAILED',
               analysisOutcome: 'CHECK_UNAVAILABLE',
+              publicationDecision: 'HELD_FOR_REVIEW',
+              decisionReason: analysis.decisionReason,
               policyVersion: analysis.policyVersion,
               errorCode: analysis.errorCode,
               evidence: analysis.evidence
             });
           }
         } else {
-          // Requeue for retry with backoff
+          // Requeue for retry with exponential backoff
           analysis.processingState = 'QUEUED';
           await analysis.save();
           setTimeout(async () => {

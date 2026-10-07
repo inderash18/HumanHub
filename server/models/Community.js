@@ -47,7 +47,6 @@ const communitySchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-communitySchema.index({ slug: 1 });
 communitySchema.index({ memberCount: -1 });
 
 export default mongoose.model('Community', communitySchema);

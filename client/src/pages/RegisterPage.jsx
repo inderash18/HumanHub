@@ -1,13 +1,6 @@
-import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React from 'react';
+import LandingPage from './LandingPage';
 
 export default function RegisterPage() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    navigate('/?mode=signup', { replace: true });
-  }, [navigate]);
-
-  return null;
+  return <LandingPage initialMode="signup" />;
 }
-

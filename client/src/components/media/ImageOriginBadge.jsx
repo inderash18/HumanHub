@@ -6,37 +6,43 @@ import {
   HelpCircle, 
   Camera, 
   Loader2,
-  Info
+  Info,
+  Lock
 } from 'lucide-react';
 
 /**
- * Compact Instagram-style Image Origin & Provenance Badge.
+ * Compact Image Origin & Provenance Badge.
  */
 export default function ImageOriginBadge({
   outcome,
   evidence,
   processingState,
+  publicationDecision,
   onClick,
   size = 'sm',
   className = ''
 }) {
-  const isPending = processingState === 'QUEUED' || processingState === 'RUNNING' || outcome === 'PENDING';
+  const isPending = processingState === 'QUEUED' || processingState === 'RUNNING' || outcome === 'PENDING' || publicationDecision === 'PENDING';
   
   let label = evidence?.badgeLabel || 'Origin check';
   let variant = evidence?.badgeVariant || 'neutral';
   let Icon = Info;
 
   if (isPending) {
-    label = 'Checking image...';
+    label = 'Checking image before publishing...';
     variant = 'pending';
     Icon = Loader2;
-  } else if (processingState === 'FAILED' || outcome === 'CHECK_UNAVAILABLE') {
-    Icon = Info;
-    variant = 'unavailable';
-    label = evidence?.badgeLabel || 'Image check unavailable';
-  } else if (outcome === 'AI_ORIGIN_DOCUMENTED') {
+  } else if (outcome === 'GOOGLE_AI_ORIGIN_DOCUMENTED') {
+    Icon = AlertTriangle;
+    variant = 'danger';
+    label = evidence?.badgeLabel || 'Google AI generation detected';
+  } else if (outcome === 'GOOGLE_AI_EDITING_DOCUMENTED') {
     Icon = Sparkles;
-    variant = 'verified';
+    variant = 'info';
+    label = evidence?.badgeLabel || 'Google AI editing detected';
+  } else if (outcome === 'AI_ORIGIN_DOCUMENTED') {
+    Icon = AlertTriangle;
+    variant = 'danger';
     label = evidence?.badgeLabel || 'AI origin documented';
   } else if (outcome === 'AI_EDITING_DOCUMENTED') {
     Icon = Sparkles;
@@ -53,23 +59,24 @@ export default function ImageOriginBadge({
       label = evidence?.badgeLabel || 'Camera capture documented';
     } else {
       Icon = ShieldCheck;
-      variant = 'neutral';
+      variant = 'verified';
       label = evidence?.badgeLabel || 'Likely authentic';
     }
   } else if (outcome === 'INCONCLUSIVE') {
     Icon = HelpCircle;
     variant = 'neutral';
-    label = evidence?.badgeLabel || 'Could not determine';
-  } else {
+    label = evidence?.badgeLabel || 'This image needs review';
+  } else if (processingState === 'FAILED' || outcome === 'CHECK_UNAVAILABLE') {
     Icon = Info;
     variant = 'unavailable';
     label = evidence?.badgeLabel || 'Image check unavailable';
   }
 
   const variantStyles = {
-    verified: 'bg-[#0095F6]/15 text-[#0095F6] border-[#0095F6]/30 hover:bg-[#0095F6]/25',
+    verified: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25',
     info: 'bg-[#8B5CF6]/15 text-[#8B5CF6] border-[#8B5CF6]/30 hover:bg-[#8B5CF6]/25',
     warning: 'bg-[#F59E0B]/15 text-[#F59E0B] border-[#F59E0B]/30 hover:bg-[#F59E0B]/25',
+    danger: 'bg-rose-500/15 text-rose-400 border-rose-500/30 hover:bg-rose-500/25',
     neutral: 'bg-black/60 backdrop-blur-md text-white/90 border-white/15 hover:bg-black/80',
     unavailable: 'bg-white/10 text-white/70 border-white/15 hover:bg-white/15',
     pending: 'bg-black/60 backdrop-blur-md text-white/80 border-white/15'
@@ -97,7 +104,7 @@ export default function ImageOriginBadge({
       `}
     >
       <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${isPending ? 'animate-spin' : ''}`} />
-      <span className="truncate max-w-[160px] sm:max-w-[200px]">{label}</span>
+      <span className="truncate max-w-[170px] sm:max-w-[220px]">{label}</span>
     </button>
   );
 }

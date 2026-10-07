@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiFileText, FiImage, FiLink, FiCheckSquare, FiLoader, FiShield, FiAlertTriangle } from 'react-icons/fi';
+import { FiFileText, FiImage, FiLink, FiCheckSquare, FiLoader, FiShield, FiAlertTriangle, FiCheckCircle } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import api from '../services/api';
 import { fetchCommunities } from '../services/communityService';
@@ -23,8 +23,7 @@ export default function SubmitPostPage() {
     
     // Scan overlay states
     const [scanning, setScanning] = useState(false);
-    const [scanStep, setScanStep] = useState(0); // 0: ingesting, 1: perplexity, 2: compiling, 3: completed
-    const [mockScore, setMockScore] = useState(0);
+    const [scanMessage, setScanMessage] = useState('Checking image before publishing...');
 
     // Core Form State
     const [communities, setCommunities] = useState([]);
@@ -52,87 +51,85 @@ export default function SubmitPostPage() {
         load();
     }, []);
 
-    // Animate trust score ticking
-    useEffect(() => {
-        let timer;
-        if (scanning) {
-            timer = setInterval(() => {
-                setMockScore(prev => {
-                    if (prev >= 96) {
-                        clearInterval(timer);
-                        return 96;
-                    }
-                    return prev + 1;
-                });
-            }, 30);
-        } else {
-            setMockScore(0);
-        }
-        return () => clearInterval(timer);
-    }, [scanning]);
-
-    // Handle steps sequencing
-    useEffect(() => {
-        let t1, t2, t3;
-        if (scanning) {
-            setScanStep(0);
-            t1 = setTimeout(() => setScanStep(1), 1200);
-            t2 = setTimeout(() => setScanStep(2), 2400);
-            t3 = setTimeout(() => setScanStep(3), 3600);
-        }
-        return () => {
-            clearTimeout(t1);
-            clearTimeout(t2);
-            clearTimeout(t3);
-        };
-    }, [scanning]);
-
     const handlePublish = async () => {
         if (!selectedCommunity) return toast.error("Please select a community zone.");
         if (!title.trim()) return toast.error("A post title is required.");
 
         setScanning(true);
+        setScanMessage("Checking image before publishing...");
 
-        // Wait for scanning sequence to finish (3.8 seconds)
-        setTimeout(async () => {
-            try {
-                let finalMediaUrls = [];
+        try {
+            let finalMediaUrls = [];
+            let finalMediaIds = [];
 
-                // 1. Upload media if any
-                if (mediaFiles.length > 0) {
+            // 1. Upload media if any and verify with server
+            if (mediaFiles.length > 0) {
+                for (const m of mediaFiles) {
                     const formData = new FormData();
-                    mediaFiles.forEach(m => formData.append('images', m.file));
+                    formData.append('file', m.file);
                     
-                    const { data: uploadData } = await api.post('/posts/upload', formData, {
+                    const { data: uploadRes } = await api.post('/v1/media/uploads', formData, {
                         headers: { 'Content-Type': 'multipart/form-data' }
                     });
-                    // Append adjustment parameters as hash query metadata
-                    finalMediaUrls = uploadData.urls.map((url, idx) => {
-                        const adj = mediaFiles[idx]?.adjustments;
-                        if (!adj) return url;
-                        return `${url}#brightness=${adj.brightness}&contrast=${adj.contrast}&saturation=${adj.saturation}&rotate=${adj.rotate}&filter=${encodeURIComponent(adj.filter)}`;
-                    });
+
+                    if (uploadRes?.success) {
+                        finalMediaUrls.push(uploadRes.url);
+                        finalMediaIds.push(uploadRes.mediaId);
+
+                        // Poll for analysis completion (max 10 attempts)
+                        let decision = uploadRes.publicationDecision || 'PENDING';
+                        let reason = uploadRes.decisionReason || '';
+                        let attempts = 0;
+
+                        while ((decision === 'PENDING' || !decision) && attempts < 15) {
+                            await new Promise(r => setTimeout(r, 1000));
+                            attempts++;
+                            try {
+                                const checkRes = await api.get(`/v1/media/${uploadRes.mediaId}/analysis`);
+                                if (checkRes.data?.data) {
+                                    decision = checkRes.data.data.publicationDecision;
+                                    reason = checkRes.data.data.decisionReason;
+                                    if (decision === 'PENDING') {
+                                        setScanMessage("Analyzing C2PA credentials and pixel structure...");
+                                    }
+                                }
+                            } catch {}
+                        }
+
+                        if (decision === 'BLOCKED') {
+                            throw new Error(`Google AI generation or editing detected (${reason}). Publication is blocked.`);
+                        }
+
+                        if (decision === 'HELD_FOR_REVIEW') {
+                            throw new Error(`This image needs review before publishing (${reason}).`);
+                        }
+
+                        if (decision !== 'ALLOWED') {
+                            throw new Error(`Verification is temporarily unavailable. Your image has been saved as a draft.`);
+                        }
+                    }
                 }
-
-                // 2. Create Post
-                const postPayload = {
-                    title,
-                    body: activeTab === 'text' ? body : activeTab === 'poll' ? JSON.stringify({ pollOptions: pollOptions.filter(o => o.trim()) }) : '',
-                    communityId: selectedCommunity,
-                    mediaUrls: finalMediaUrls,
-                    status: 'pending' // Queued into backend verification pipeline
-                };
-
-                await api.post('/posts', postPayload);
-                toast.success("Post queued for verification!");
-                navigate('/feed');
-            } catch (err) {
-                console.error(err);
-                toast.error(err.response?.data?.message || "Post transmission interrupted.");
-            } finally {
-                setScanning(false);
             }
-        }, 4000);
+
+            // 2. Create Post
+            const postPayload = {
+                title,
+                caption: title,
+                body: activeTab === 'text' ? body : activeTab === 'poll' ? JSON.stringify({ pollOptions: pollOptions.filter(o => o.trim()) }) : '',
+                communityId: selectedCommunity,
+                mediaUrls: finalMediaUrls,
+                mediaIds: finalMediaIds
+            };
+
+            await api.post('/posts', postPayload);
+            toast.success("Post published successfully!");
+            navigate('/feed');
+        } catch (err) {
+            console.error(err);
+            toast.error(err.response?.data?.message || err.message || "Post transmission interrupted.");
+        } finally {
+            setScanning(false);
+        }
     };
 
     const handleAddPollOption = () => {
@@ -157,193 +154,138 @@ export default function SubmitPostPage() {
                         >
                             <option value="" disabled>Select community...</option>
                             {communities.map(c => (
-                                <option key={c._id} value={c._id}>d/{c.slug}</option>
+                                <option key={c._id} value={c._id}>c/{c.slug}</option>
                             ))}
                         </select>
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-xs text-[var(--text-secondary)]">▼</div>
                     </div>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-[var(--border-color)]">
+                <div className="flex border-b border-[var(--border-color)] gap-1">
                     {TABS.map(tab => (
                         <button
                             key={tab.key}
                             onClick={() => setActiveTab(tab.key)}
-                            className={`flex-1 pb-3 flex items-center justify-center gap-2 text-[10px] font-extrabold uppercase tracking-widest transition-all border-b-2 ${
+                            className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition-all duration-200 cursor-pointer ${
                                 activeTab === tab.key 
-                                ? 'text-[var(--brand-color)] border-[var(--brand-color)]' 
-                                : 'text-[var(--text-secondary)] border-transparent hover:text-[var(--text-primary)]'
+                                    ? 'border-[var(--brand-color)] text-[var(--brand-color)] bg-[var(--surface-hover)] rounded-t-[10px]' 
+                                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                             }`}
                         >
-                            <span className="text-sm">{tab.icon}</span>
+                            {tab.icon}
                             <span>{tab.label}</span>
                         </button>
                     ))}
                 </div>
 
-                {/* Title */}
-                <div className="flex flex-col gap-2">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">Post Title</span>
+                {/* Title Input */}
+                <div>
                     <input 
                         type="text" 
-                        placeholder="Add an engaging title*" 
+                        placeholder="Post headline / title" 
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
+                        className="w-full bg-[var(--surface-hover)] border border-[var(--border-color)] rounded-[14px] p-3.5 text-sm font-semibold text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--brand-color)] transition-colors"
                         maxLength={300}
-                        className="premium-input text-xs font-semibold py-3 px-4"
                     />
                 </div>
 
-                {/* Rich editors and components based on Active Tab */}
-                <div className="min-h-[200px]">
-                    <AnimatePresence mode="wait">
-                        <motion.div
-                            key={activeTab}
-                            initial={{ opacity: 0, y: 5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -5 }}
-                            transition={{ duration: 0.15 }}
-                        >
-                            {activeTab === 'text' && (
-                                <div className="premium-editor">
-                                    <ReactQuill 
-                                        theme="snow" 
-                                        value={body} 
-                                        onChange={setBody} 
-                                        placeholder="Write your story..."
-                                    />
-                                    <style>{`
-                                        .premium-editor .ql-container { border: 1px solid var(--border-color) !important; border-radius: 0 0 16px 16px !important; color: var(--text-primary) !important; font-family: inherit; font-size: 13px; min-height: 200px; }
-                                        .premium-editor .ql-toolbar { background: var(--surface-hover) !important; border: 1px solid var(--border-color) !important; border-radius: 16px 16px 0 0 !important; }
-                                        .premium-editor .ql-editor.ql-blank::before { color: var(--text-muted) !important; font-style: normal; }
-                                        .premium-editor .ql-stroke { stroke: var(--text-secondary) !important; }
-                                        .premium-editor .ql-fill { fill: var(--text-secondary) !important; }
-                                        .premium-editor .ql-picker { color: var(--text-secondary) !important; }
-                                    `}</style>
-                                </div>
-                            )}
+                {/* Tab Specific Views */}
+                {activeTab === 'text' && (
+                    <div className="flex flex-col gap-2">
+                        <textarea
+                            placeholder="Write your post content..."
+                            value={body}
+                            onChange={(e) => setBody(e.target.value)}
+                            className="w-full min-h-[160px] bg-[var(--surface-hover)] border border-[var(--border-color)] rounded-[14px] p-3.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--brand-color)] transition-colors resize-none"
+                        />
+                    </div>
+                )}
 
-                            {activeTab === 'image' && (
-                                <MediaUpload value={mediaFiles} onChange={setMediaFiles} />
-                            )}
+                {activeTab === 'image' && (
+                    <div className="flex flex-col gap-4">
+                        <MediaUpload files={mediaFiles} setFiles={setMediaFiles} />
+                    </div>
+                )}
 
-                            {activeTab === 'link' && (
-                                <div className="flex flex-col gap-2">
-                                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">External Link</span>
-                                    <input 
-                                        type="url" 
-                                        placeholder="https://example.com/story"
-                                        value={linkUrl}
-                                        onChange={(e) => setLinkUrl(e.target.value)}
-                                        className="premium-input text-xs font-semibold py-3"
-                                    />
-                                </div>
-                            )}
+                {activeTab === 'link' && (
+                    <div className="flex flex-col gap-2">
+                        <input 
+                            type="url" 
+                            placeholder="https://..." 
+                            value={linkUrl}
+                            onChange={(e) => setLinkUrl(e.target.value)}
+                            className="w-full bg-[var(--surface-hover)] border border-[var(--border-color)] rounded-[14px] p-3.5 text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--brand-color)]"
+                        />
+                    </div>
+                )}
 
-                            {activeTab === 'poll' && (
-                                <div className="flex flex-col gap-3">
-                                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">Poll Options</span>
-                                    {pollOptions.map((opt, i) => (
-                                        <input
-                                            key={i}
-                                            type="text"
-                                            placeholder={`Option ${i + 1}`}
-                                            value={opt}
-                                            onChange={(e) => {
-                                                const next = [...pollOptions];
-                                                next[i] = e.target.value;
-                                                setPollOptions(next);
-                                            }}
-                                            className="premium-input text-xs font-semibold py-3"
-                                        />
-                                    ))}
-                                    {pollOptions.length < 5 && (
-                                        <button 
-                                            onClick={handleAddPollOption}
-                                            className="text-xs font-bold text-[var(--brand-color)] text-left hover:underline w-fit mt-1"
-                                        >
-                                            + Add Option
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-                        </motion.div>
-                    </AnimatePresence>
-                </div>
+                {activeTab === 'poll' && (
+                    <div className="flex flex-col gap-3">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">Poll Options</span>
+                        {pollOptions.map((opt, idx) => (
+                            <input 
+                                key={idx}
+                                type="text"
+                                placeholder={`Option ${idx + 1}`}
+                                value={opt}
+                                onChange={(e) => {
+                                    const next = [...pollOptions];
+                                    next[idx] = e.target.value;
+                                    setPollOptions(next);
+                                }}
+                                className="bg-[var(--surface-hover)] border border-[var(--border-color)] rounded-[12px] p-2.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand-color)]"
+                            />
+                        ))}
+                        {pollOptions.length < 5 && (
+                            <button 
+                                onClick={handleAddPollOption}
+                                className="text-xs font-bold text-[var(--brand-color)] hover:underline self-start mt-1 cursor-pointer"
+                            >
+                                + Add Option
+                            </button>
+                        )}
+                    </div>
+                )}
 
-                {/* Footer Buttons */}
-                <div className="flex justify-end gap-3 border-t border-[var(--border-color)] pt-4 mt-2">
+                {/* Footer Controls */}
+                <div className="flex items-center justify-between border-t border-[var(--border-color)] pt-4 mt-2">
+                    <span className="text-[11px] text-[var(--text-tertiary)] flex items-center gap-1.5">
+                        <FiShield className="text-[var(--brand-color)]" />
+                        Server verifies provenance & origin before publishing
+                    </span>
+
                     <button 
-                        onClick={() => navigate('/feed')}
-                        className="btn-premium-outline py-2 px-6 text-xs"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        disabled={loading || !title.trim()}
                         onClick={handlePublish}
-                        className="btn-premium py-2 px-8 text-xs disabled:opacity-30"
+                        disabled={scanning}
+                        className="bg-[var(--brand-color)] hover:bg-[var(--brand-hover)] text-white text-xs font-extrabold px-6 py-2.5 rounded-[12px] shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-2"
                     >
-                        Publish Post
+                        {scanning && <FiLoader className="animate-spin" />}
+                        <span>Publish</span>
                     </button>
                 </div>
+
             </div>
 
-            {/* Interactive Live AI Scan Overlay Screen */}
+            {/* Scanning Overlay Modal */}
             <AnimatePresence>
                 {scanning && (
                     <motion.div 
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[20000] bg-[var(--bg-color)]/95 flex items-center justify-center p-4 backdrop-blur-md"
+                        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
                     >
-                        <div className="w-full max-w-sm flex flex-col items-center text-center gap-6">
-                            <div className="relative w-24 h-24 flex items-center justify-center">
-                                {/* Ring progress */}
-                                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                                    <circle cx="18" cy="18" r="16" fill="none" stroke="var(--border-color)" strokeWidth="2" />
-                                    <circle 
-                                        cx="18" 
-                                        cy="18" 
-                                        r="16" 
-                                        fill="none" 
-                                        stroke="var(--brand-color)" 
-                                        strokeWidth="3.5" 
-                                        strokeDasharray="100" 
-                                        strokeDashoffset={100 - mockScore}
-                                        strokeLinecap="round"
-                                        className="transition-all duration-75"
-                                    />
-                                </svg>
-                                <FiShield className="absolute text-3xl text-[var(--brand-color)] animate-pulse" />
+                        <div className="bg-[var(--surface-elevated)] border border-[var(--border-color)] rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center space-y-4">
+                            <div className="w-14 h-14 rounded-full bg-[var(--brand-color)]/10 border border-[var(--brand-color)]/30 flex items-center justify-center mx-auto text-[var(--brand-color)]">
+                                <FiLoader className="w-7 h-7 animate-spin" />
                             </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <span className="font-brand text-lg font-black text-[var(--text-primary)]">Human Verification Scan</span>
-                                <span className="text-xs text-[var(--text-secondary)] font-mono">Calculated Authenticity: {mockScore}%</span>
-                            </div>
-
-                            {/* Processing sequence timeline indicators */}
-                            <div className="flex flex-col gap-3 w-full bg-[var(--surface-color)] p-4 rounded-xl border border-[var(--border-color)]">
-                                <div className="flex items-center gap-3 text-left">
-                                    <FiLoader className={`text-xs ${scanStep >= 0 ? 'text-[var(--verified-color)] animate-spin' : 'text-[var(--text-muted)]'}`} />
-                                    <span className={`text-xs font-semibold ${scanStep >= 0 ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>Ingesting content nodes...</span>
-                                </div>
-                                <div className="flex items-center gap-3 text-left">
-                                    <FiLoader className={`text-xs ${scanStep >= 1 ? 'text-[var(--verified-color)] animate-spin' : 'text-[var(--text-muted)]'}`} />
-                                    <span className={`text-xs font-semibold ${scanStep >= 1 ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>Evaluating perplexity vectors...</span>
-                                </div>
-                                <div className="flex items-center gap-3 text-left">
-                                    <FiLoader className={`text-xs ${scanStep >= 2 ? 'text-[var(--verified-color)] animate-spin' : 'text-[var(--text-muted)]'}`} />
-                                    <span className={`text-xs font-semibold ${scanStep >= 2 ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>Verifying behavioral fingerprints...</span>
-                                </div>
-                                <div className="flex items-center gap-3 text-left">
-                                    <FiLoader className={`text-xs ${scanStep >= 3 ? 'text-[var(--verified-color)] animate-spin' : 'text-[var(--text-muted)]'}`} />
-                                    <span className={`text-xs font-semibold ${scanStep >= 3 ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>Publishing transaction to feed...</span>
-                                </div>
-                            </div>
+                            <h3 className="text-base font-bold text-[var(--text-primary)]">
+                                Origin Verification in Progress
+                            </h3>
+                            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                                {scanMessage}
+                            </p>
                         </div>
                     </motion.div>
                 )}

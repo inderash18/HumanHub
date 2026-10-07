@@ -52,6 +52,8 @@ const mediaAnalysisSchema = new mongoose.Schema({
   analysisOutcome: {
     type: String,
     enum: [
+      'GOOGLE_AI_ORIGIN_DOCUMENTED',
+      'GOOGLE_AI_EDITING_DOCUMENTED',
       'AI_ORIGIN_DOCUMENTED',
       'AI_EDITING_DOCUMENTED',
       'LIKELY_AI_GENERATED',
@@ -64,6 +66,29 @@ const mediaAnalysisSchema = new mongoose.Schema({
     default: 'PENDING',
     index: true
   },
+  publicationDecision: {
+    type: String,
+    enum: ['PENDING', 'ALLOWED', 'HELD_FOR_REVIEW', 'BLOCKED'],
+    default: 'PENDING',
+    index: true
+  },
+  decisionReason: {
+    type: String,
+    default: 'Analysis is queued for origin verification and policy evaluation.'
+  },
+  googleAiDetection: {
+    status: { type: String, default: 'NOT_CONFIGURED' },
+    provider: { type: String, default: 'Google Cloud SynthID API' },
+    watermarkDetected: { type: Boolean, default: null },
+    aiOriginAsserted: { type: Boolean, default: false },
+    aiEditingAsserted: { type: Boolean, default: false },
+    toolsMentioned: [{ type: String }],
+    evidenceSource: { type: String, default: 'none' },
+    providerRequestId: { type: String, default: null },
+    errorMessage: { type: String, default: null },
+    limitations: [{ type: String }],
+    latencyMs: { type: Number, default: 0 }
+  },
   provenance: {
     status: { type: String, default: 'ABSENT' },
     manifestPresent: { type: Boolean, default: false },
@@ -75,6 +100,9 @@ const mediaAnalysisSchema = new mongoose.Schema({
     isAiOriginAsserted: { type: Boolean, default: false },
     isAiEditingAsserted: { type: Boolean, default: false },
     isCameraCaptureAsserted: { type: Boolean, default: false },
+    isGoogleAiOriginAsserted: { type: Boolean, default: false },
+    isGoogleAiEditingAsserted: { type: Boolean, default: false },
+    googleToolsMentioned: [{ type: String }],
     aiToolsMentioned: [{ type: String }],
     actions: [{ type: mongoose.Schema.Types.Mixed }],
     validationErrors: [{ type: String }],
@@ -92,6 +120,8 @@ const mediaAnalysisSchema = new mongoose.Schema({
     colorSpace: { type: String, default: null },
     aiGenerationSoftwareDetected: { type: String, default: null },
     hasAiGenerationParameters: { type: Boolean, default: false },
+    isGoogleAiMetadataDetected: { type: Boolean, default: false },
+    digitalSourceType: { type: String, default: null },
     latencyMs: { type: Number, default: 0 }
   },
   detector: {
@@ -108,7 +138,7 @@ const mediaAnalysisSchema = new mongoose.Schema({
     details: { type: mongoose.Schema.Types.Mixed, default: {} }
   },
   evidence: {
-    badgeLabel: { type: String, default: 'Checking image...' },
+    badgeLabel: { type: String, default: 'Checking image before publishing...' },
     badgeVariant: { type: String, default: 'neutral' },
     primaryExplanation: { type: String, default: 'Origin verification in progress.' },
     detailedPoints: [{ type: String }],
@@ -171,12 +201,16 @@ const mediaAnalysisSchema = new mongoose.Schema({
     },
     originalOutcome: {
       type: String
+    },
+    originalDecision: {
+      type: String
     }
   }
 }, { timestamps: true });
 
 mediaAnalysisSchema.index({ mediaId: 1, mediaVersion: -1 });
 mediaAnalysisSchema.index({ fileHash: 1, processingState: 1 });
+mediaAnalysisSchema.index({ publicationDecision: 1, processingState: 1 });
 mediaAnalysisSchema.index({ 'reviewRequest.status': 1, createdAt: -1 });
 
 export default mongoose.model('MediaAnalysis', mediaAnalysisSchema);

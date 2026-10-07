@@ -268,7 +268,7 @@ export default function PostCard({ post, onUpdate }) {
       await api.delete(`/posts/${post._id}`);
       toast.success('Post deleted');
       setShowOptionsModal(false);
-      if (onUpdate) onUpdate();
+      if (onUpdate) onUpdate(post._id);
     } catch (err) {
       toast.error('Failed to delete post');
     }
@@ -353,6 +353,7 @@ export default function PostCard({ post, onUpdate }) {
               alt={postText || 'Post photo'} 
               className="w-full h-full object-cover"
               loading="lazy"
+              decoding="async"
             />
           )}
 

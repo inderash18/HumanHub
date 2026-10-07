@@ -6,6 +6,7 @@ import Block from '../models/Block.js';
 import Message from '../models/Message.js';
 import Conversation from '../models/Conversation.js';
 import Notification from '../models/Notification.js';
+import MediaAnalysis from '../models/MediaAnalysis.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { getIO } from '../socket/socketHandler.js';
 
@@ -55,8 +56,41 @@ export const createStory = asyncHandler(async (req, res) => {
     throw new Error('Valid media URL is required for a story');
   }
 
-  const cleanMediaUrl = mediaUrl.trim();
+  const cleanMediaUrl = mediaUrl.trim().split('#')[0];
   const isVideo = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(cleanMediaUrl);
+  const isUploadPath = cleanMediaUrl.startsWith('/api/uploads/') || cleanMediaUrl.startsWith('/uploads/');
+  if (!isVideo && isUploadPath && mongoose.connection.readyState === 1) {
+    // Enforce MediaAnalysis check for uploaded image stories
+    const analysis = await MediaAnalysis.findOne({
+      mediaUrl: cleanMediaUrl,
+      owner: req.user._id
+    }).sort({ mediaVersion: -1 });
+
+    if (!analysis) {
+      res.status(400);
+      throw new Error(`Unverified story media: "${cleanMediaUrl}". All story images must be verified.`);
+    }
+
+    if (String(analysis.owner) !== String(req.user._id)) {
+      res.status(403);
+      throw new Error('Unauthorized: You do not own this media record.');
+    }
+
+    if (analysis.publicationDecision === 'BLOCKED') {
+      res.status(403);
+      throw new Error(`Story publication blocked: ${analysis.decisionReason || 'AI-generated media detected.'}`);
+    }
+
+    if (analysis.publicationDecision === 'HELD_FOR_REVIEW') {
+      res.status(403);
+      throw new Error(`Story publication held: Image requires review before publishing (${analysis.decisionReason}).`);
+    }
+
+    if (analysis.publicationDecision !== 'ALLOWED') {
+      res.status(422);
+      throw new Error('Media verification is in progress. Please wait before publishing.');
+    }
+  }
 
   // Authoritative server-side ownership assignment
   const story = await Story.create({

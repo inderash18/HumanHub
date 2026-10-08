@@ -51,7 +51,7 @@ export default function SubmitPostPage() {
         load();
     }, []);
 
-    const handlePublish = async () => {
+    const handlePublish = async (isDraft = false) => {
         if (!selectedCommunity) return toast.error("Please select a community zone.");
         if (!title.trim()) return toast.error("A post title is required.");
 
@@ -61,6 +61,7 @@ export default function SubmitPostPage() {
         try {
             let finalMediaUrls = [];
             let finalMediaIds = [];
+            let isHeldForReview = false;
 
             // 1. Upload media if any and verify with server
             if (mediaFiles.length > 0) {
@@ -76,12 +77,12 @@ export default function SubmitPostPage() {
                         finalMediaUrls.push(uploadRes.url);
                         finalMediaIds.push(uploadRes.mediaId);
 
-                        // Poll for analysis completion (max 10 attempts)
+                        // Poll for analysis completion if pending (max 8 attempts)
                         let decision = uploadRes.publicationDecision || 'PENDING';
                         let reason = uploadRes.decisionReason || '';
                         let attempts = 0;
 
-                        while ((decision === 'PENDING' || !decision) && attempts < 15) {
+                        while ((decision === 'PENDING' || !decision) && attempts < 8) {
                             await new Promise(r => setTimeout(r, 1000));
                             attempts++;
                             try {
@@ -90,7 +91,7 @@ export default function SubmitPostPage() {
                                     decision = checkRes.data.data.publicationDecision;
                                     reason = checkRes.data.data.decisionReason;
                                     if (decision === 'PENDING') {
-                                        setScanMessage("Analyzing C2PA credentials and pixel structure...");
+                                        setScanMessage("Checking image origin and credentials...");
                                     }
                                 }
                             } catch {}
@@ -100,12 +101,8 @@ export default function SubmitPostPage() {
                             throw new Error(`Google AI generation or editing detected (${reason}). Publication is blocked.`);
                         }
 
-                        if (decision === 'HELD_FOR_REVIEW') {
-                            throw new Error(`This image needs review before publishing (${reason}).`);
-                        }
-
-                        if (decision !== 'ALLOWED') {
-                            throw new Error(`Verification is temporarily unavailable. Your image has been saved as a draft.`);
+                        if (decision === 'HELD_FOR_REVIEW' || decision === 'CHECK_UNAVAILABLE' || decision === 'PENDING') {
+                            isHeldForReview = true;
                         }
                     }
                 }
@@ -118,11 +115,18 @@ export default function SubmitPostPage() {
                 body: activeTab === 'text' ? body : activeTab === 'poll' ? JSON.stringify({ pollOptions: pollOptions.filter(o => o.trim()) }) : '',
                 communityId: selectedCommunity,
                 mediaUrls: finalMediaUrls,
-                mediaIds: finalMediaIds
+                mediaIds: finalMediaIds,
+                status: isDraft ? 'draft' : (isHeldForReview ? 'pending_review' : 'published')
             };
 
             await api.post('/posts', postPayload);
-            toast.success("Post published successfully!");
+            if (isDraft) {
+                toast.success("Draft saved successfully!");
+            } else if (isHeldForReview) {
+                toast.success("Automated AI check is currently unavailable. Your post is held for manual review.", { duration: 5000 });
+            } else {
+                toast.success("Post published successfully!");
+            }
             navigate('/feed');
         } catch (err) {
             console.error(err);
@@ -255,14 +259,24 @@ export default function SubmitPostPage() {
                         Server verifies provenance & origin before publishing
                     </span>
 
-                    <button 
-                        onClick={handlePublish}
-                        disabled={scanning}
-                        className="bg-[var(--brand-color)] hover:bg-[var(--brand-hover)] text-white text-xs font-extrabold px-6 py-2.5 rounded-[12px] shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-2"
-                    >
-                        {scanning && <FiLoader className="animate-spin" />}
-                        <span>Publish</span>
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={() => handlePublish(true)}
+                            disabled={scanning}
+                            className="bg-transparent hover:bg-white/5 border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold px-4 py-2.5 rounded-[12px] transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                        >
+                            Save Draft
+                        </button>
+
+                        <button 
+                            onClick={() => handlePublish(false)}
+                            disabled={scanning}
+                            className="bg-[var(--brand-color)] hover:bg-[var(--brand-hover)] text-white text-xs font-extrabold px-6 py-2.5 rounded-[12px] shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                        >
+                            {scanning && <FiLoader className="animate-spin" />}
+                            <span>Publish</span>
+                        </button>
+                    </div>
                 </div>
 
             </div>

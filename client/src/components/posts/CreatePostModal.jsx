@@ -202,35 +202,24 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
   };
 
   const handleSaveDraft = () => {
-    toast.success('Your post draft has been saved locally.');
-    onClose();
+    handlePublish(true);
   };
 
-  const allMediaAllowed = uploadedMediaItems.length > 0 && uploadedMediaItems.every(
-    item => item.publicationDecision === 'ALLOWED'
-  );
-
-  const hasPendingAnalysis = isUploading || uploadedMediaItems.some(
-    item => item.processingState === 'QUEUED' || item.processingState === 'RUNNING' || item.publicationDecision === 'PENDING'
-  );
-
   const blockedItem = uploadedMediaItems.find(item => item.publicationDecision === 'BLOCKED');
-  const heldItem = uploadedMediaItems.find(item => item.publicationDecision === 'HELD_FOR_REVIEW');
+  const heldItem = uploadedMediaItems.find(
+    item => item.publicationDecision === 'HELD_FOR_REVIEW' || item.analysisOutcome === 'CHECK_UNAVAILABLE'
+  );
 
-  const handlePublish = async () => {
+  const canSubmit = !isPosting && !isUploading && !blockedItem && (mediaFiles.length > 0 || caption.trim().length > 0);
+
+  const handlePublish = async (isDraft = false) => {
     if (mediaFiles.length === 0 && !caption.trim()) {
       toast.error('Add a photo or caption to post');
       return;
     }
 
-    if (!allMediaAllowed && uploadedMediaItems.length > 0) {
-      if (hasPendingAnalysis) {
-        toast.error('Please wait for image verification to complete.');
-      } else if (blockedItem) {
-        toast.error(`Publication blocked: ${blockedItem.decisionReason || 'AI-generated media detected.'}`);
-      } else if (heldItem) {
-        toast.error(`Publication held: ${heldItem.decisionReason || 'Image needs review.'}`);
-      }
+    if (blockedItem) {
+      toast.error(`Publication blocked: ${blockedItem.decisionReason || 'AI-generated media detected.'}`);
       return;
     }
 
@@ -239,17 +228,39 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
 
       const mediaUrls = uploadedMediaItems.map(item => item.url).filter(Boolean);
       const mediaIds = uploadedMediaItems.map(item => item.mediaId).filter(Boolean);
+      const mediaPayload = uploadedMediaItems.map(item => ({
+        url: item.url,
+        publicId: item.publicId || item.public_id || '',
+        provider: item.provider || (item.url.includes('cloudinary') ? 'cloudinary' : 'local'),
+        resourceType: item.resourceType || 'image',
+        format: item.format || '',
+        bytes: item.bytes || 0,
+        width: item.width || 0,
+        height: item.height || 0
+      }));
+
+      const isHeldForReview = Boolean(heldItem) || uploadedMediaItems.some(
+        item => item.publicationDecision === 'HELD_FOR_REVIEW' || item.analysisOutcome === 'CHECK_UNAVAILABLE'
+      );
 
       const payload = {
         caption: caption.trim(),
         body: caption.trim(),
         communityId: communityId || undefined,
         mediaUrls,
-        mediaIds
+        mediaIds,
+        media: mediaPayload,
+        status: isDraft ? 'draft' : (isHeldForReview ? 'pending_review' : 'published')
       };
 
       await api.post('/posts', payload);
-      toast.success('Your post has been published.');
+      if (isDraft) {
+        toast.success('Your post draft has been saved.');
+      } else if (isHeldForReview) {
+        toast.success('Automated AI check is currently unavailable. Your post is held for manual review.', { duration: 5000 });
+      } else {
+        toast.success('Your post has been published.');
+      }
       if (onPostCreated) onPostCreated();
       onClose();
     } catch (err) {
@@ -300,11 +311,11 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
 
           {step === 2 ? (
             <button 
-              onClick={handlePublish}
-              disabled={isPosting || isUploading || (!allMediaAllowed && uploadedMediaItems.length > 0)}
+              onClick={() => handlePublish(false)}
+              disabled={!canSubmit}
               className="text-sm font-semibold text-[var(--ig-primary-button)] hover:text-[var(--ig-primary-button-hover)] disabled:opacity-40 flex items-center gap-1.5 cursor-pointer"
             >
-              {isPosting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Share'}
+              {isPosting ? <Loader2 className="w-4 h-4 animate-spin" /> : (heldItem ? 'Submit' : 'Share')}
             </button>
           ) : (
             <div className="w-5" />
@@ -436,10 +447,10 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
                     <div className="bg-rose-500/10 border border-rose-500/25 rounded-xl p-3 text-xs space-y-2">
                       <div className="flex items-center gap-1.5 text-rose-400 font-semibold">
                         <AlertTriangle className="w-4 h-4 shrink-0" />
-                        <span>Google AI generation or editing detected</span>
+                        <span>Gemini detected this image as AI-generated. Publishing is blocked.</span>
                       </div>
                       <p className="text-[var(--text-secondary)] text-[11px] leading-relaxed">
-                        {currentUploadedItem.decisionReason || 'Direct publishing is blocked under platform policy.'}
+                        {currentUploadedItem.decisionReason || 'Gemini detected this image as AI-generated. Publishing is blocked.'}
                       </p>
                       <div className="flex items-center gap-2 pt-1">
                         <button
@@ -483,18 +494,17 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            setDisputeMediaId(currentUploadedItem.mediaId);
-                            setIsDisputeModalOpen(true);
-                          }}
-                          className="px-2.5 py-1 bg-white/10 text-white/80 hover:bg-white/15 rounded-lg text-[11px] font-medium transition-colors"
+                          onClick={() => handlePublish(false)}
+                          disabled={isPosting}
+                          className="px-2.5 py-1 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 rounded-lg text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1"
                         >
-                          Request Review
+                          {isPosting ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Request Review'}
                         </button>
                         <button
                           type="button"
                           onClick={handleSaveDraft}
-                          className="px-2.5 py-1 bg-white/10 text-white/80 hover:bg-white/15 rounded-lg text-[11px] font-medium transition-colors"
+                          disabled={isPosting}
+                          className="px-2.5 py-1 bg-white/10 text-white/80 hover:bg-white/15 rounded-lg text-[11px] font-medium transition-colors cursor-pointer"
                         >
                           Save Draft
                         </button>
@@ -515,9 +525,16 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated, defaul
                   )}
 
                   {currentUploadedItem.publicationDecision === 'ALLOWED' && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-xl p-2.5 text-xs flex items-center gap-2 text-emerald-400">
-                      <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span className="font-semibold text-[11px]">Approved for publishing.</span>
+                    <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-xl p-2.5 text-xs flex items-center justify-between text-emerald-400">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span className="font-semibold text-[11px]">Approved for publishing.</span>
+                      </div>
+                      {currentUploadedItem.evidence?.badgeLabel === 'Content Credentials detected AI provenance' && (
+                        <span className="text-[10px] text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded-full">
+                          Advisory C2PA provenance
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

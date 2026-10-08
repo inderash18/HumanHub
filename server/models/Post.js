@@ -49,7 +49,7 @@ const postSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['published', 'pending_review', 'blocked'],
+    enum: ['published', 'pending_review', 'blocked', 'draft'],
     default: 'pending_review',
     index: true
   },

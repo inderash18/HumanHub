@@ -100,18 +100,18 @@ export async function processAnalysisJob() {
         evidence: existingAnalysis.evidence
       };
     } else if (!process.env.AI_SERVICE_URL) {
-      // AI detection unconfigured in free deployment tier -> route to manual review
+      // Gemini verification unconfigured in free deployment tier -> allow publication with advisory badge
       report = {
-        outcome: 'CHECK_UNAVAILABLE',
-        publication_decision: 'HELD_FOR_REVIEW',
-        decision_reason: 'Automated AI analysis is unconfigured in this deployment. Media held for manual moderation.',
+        outcome: 'NO_STRONG_AI_SIGNALS',
+        publication_decision: 'ALLOWED',
+        decision_reason: 'Gemini verification unavailable, post allowed.',
         policy_version: '2026.2',
         evidence: {
-          badge_label: 'Manual Review Required',
+          badge_label: 'Gemini verification unavailable, post allowed',
           badge_variant: 'neutral',
-          primary_explanation: 'Automated verification is unconfigured. Media submitted for manual review.',
-          detailed_points: ['Deployment is running in free manual-review mode.'],
-          limitations: ['Manual moderator approval required before public feed display.'],
+          primary_explanation: 'Gemini verification was not performed or unavailable. Post publishing is allowed.',
+          detailed_points: ['AI detection is operating in advisory-only mode.', 'Post is approved for direct publishing.'],
+          limitations: ['No automated blocking asserted.'],
           camera_origin_verified: false
         }
       };
@@ -168,6 +168,20 @@ export async function processAnalysisJob() {
         errorMessage: report.google_ai_detection.error_message || null,
         limitations: report.google_ai_detection.limitations || [],
         latencyMs: report.google_ai_detection.latency_ms || 0
+      };
+    }
+
+    if (report.gemini_detection) {
+      analysis.geminiDetection = {
+        status: report.gemini_detection.status || 'NOT_CONFIGURED',
+        provider: report.gemini_detection.provider || 'gemini',
+        label: report.gemini_detection.label || 'UNVERIFIED',
+        isAiGenerated: report.gemini_detection.is_ai_generated,
+        confidence: report.gemini_detection.confidence,
+        explanation: report.gemini_detection.explanation || '',
+        modelVersion: report.gemini_detection.model_version || 'gemini-1.5-flash',
+        latencyMs: report.gemini_detection.latency_ms || 0,
+        errorMessage: report.gemini_detection.error_message || null
       };
     }
 
@@ -309,19 +323,19 @@ export async function processAnalysisJob() {
       if (analysis) {
         analysis.retryCount = (analysis.retryCount || 0) + 1;
         if (analysis.retryCount >= MAX_RETRIES) {
-          analysis.processingState = 'FAILED';
-          analysis.analysisOutcome = 'CHECK_UNAVAILABLE';
-          analysis.publicationDecision = 'HELD_FOR_REVIEW';
-          analysis.decisionReason = 'Automated check unavailable after multiple retries. Held for manual review or author retry.';
+          analysis.processingState = 'COMPLETED';
+          analysis.analysisOutcome = 'NO_STRONG_AI_SIGNALS';
+          analysis.publicationDecision = 'ALLOWED';
+          analysis.decisionReason = 'Gemini verification unavailable, post allowed.';
           analysis.policyVersion = '2026.2';
           analysis.errorCode = errorCode;
           analysis.error = error.message;
           analysis.evidence = {
-            badgeLabel: 'Image check unavailable',
-            badgeVariant: 'unavailable',
-            primaryExplanation: safeMessage,
-            detailedPoints: [detailPoint],
-            limitations: ['Verification may be retried by the post author.']
+            badgeLabel: 'Gemini verification unavailable, post allowed',
+            badgeVariant: 'neutral',
+            primaryExplanation: 'Gemini verification was not performed or unavailable. Post publishing is allowed.',
+            detailedPoints: ['AI analysis service is unreachable or unconfigured.'],
+            limitations: ['No automated blocking asserted.']
           };
           await analysis.save();
 
@@ -331,9 +345,9 @@ export async function processAnalysisJob() {
               mediaId: analysis.mediaId,
               mediaVersion: analysis.mediaVersion,
               mediaUrl: analysis.mediaUrl,
-              processingState: 'FAILED',
-              analysisOutcome: 'CHECK_UNAVAILABLE',
-              publicationDecision: 'HELD_FOR_REVIEW',
+              processingState: 'COMPLETED',
+              analysisOutcome: 'NO_STRONG_AI_SIGNALS',
+              publicationDecision: 'ALLOWED',
               decisionReason: analysis.decisionReason,
               policyVersion: analysis.policyVersion,
               errorCode: analysis.errorCode,

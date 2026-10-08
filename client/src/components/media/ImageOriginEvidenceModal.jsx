@@ -105,12 +105,12 @@ export default function ImageOriginEvidenceModal({
         };
       default:
         return {
-          title: isPending ? 'Checking Image before publishing...' : 'Image Check Unavailable',
+          title: isPending ? 'Checking image before publishing...' : 'Held for Manual Review',
           badgeColor: 'text-[var(--text-tertiary)] bg-[var(--surface-elevated)] border-[var(--border)]',
           icon: AlertCircle,
           desc: isPending 
-            ? 'Background verification and model inference are currently processing.'
-            : 'Automated pixel model or credential verification was not available for this upload. Image is saved as draft.'
+            ? 'Background verification and Content Credentials inspection in progress.'
+            : (evidence?.primaryExplanation || 'Automated AI check is currently unavailable. Your post is held for manual review.')
         };
     }
   };

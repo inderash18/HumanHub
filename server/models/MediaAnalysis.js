@@ -93,6 +93,17 @@ const mediaAnalysisSchema = new mongoose.Schema({
     limitations: [{ type: String }],
     latencyMs: { type: Number, default: 0 }
   },
+  geminiDetection: {
+    status: { type: String, default: 'NOT_CONFIGURED' },
+    provider: { type: String, default: 'gemini' },
+    label: { type: String, default: 'UNVERIFIED' },
+    isAiGenerated: { type: Boolean, default: null },
+    confidence: { type: Number, default: null },
+    explanation: { type: String, default: '' },
+    modelVersion: { type: String, default: 'gemini-1.5-flash' },
+    latencyMs: { type: Number, default: 0 },
+    errorMessage: { type: String, default: null }
+  },
   provenance: {
     status: { type: String, default: 'ABSENT' },
     manifestPresent: { type: Boolean, default: false },

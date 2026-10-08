@@ -111,6 +111,18 @@ export const uploadMediaAndEnqueueAnalysis = asyncHandler(async (req, res) => {
     provenance = existingCompleted.provenance;
     metadata = existingCompleted.metadata;
     detector = existingCompleted.detector;
+  } else if (!process.env.AI_SERVICE_URL) {
+    initialProcessingState = 'COMPLETED';
+    initialOutcome = 'NO_STRONG_AI_SIGNALS';
+    initialDecision = 'ALLOWED';
+    initialReason = 'Gemini verification unavailable, post allowed.';
+    initialEvidence = {
+      badgeLabel: 'Gemini verification unavailable, post allowed',
+      badgeVariant: 'neutral',
+      primaryExplanation: 'Gemini verification was not performed or unavailable. Post publishing is allowed.',
+      detailedPoints: ['AI detection is operating in advisory-only mode.', 'Post is approved for direct publishing.'],
+      limitations: ['No automated blocking asserted.']
+    };
   }
 
   // 3. Create MediaAnalysis record

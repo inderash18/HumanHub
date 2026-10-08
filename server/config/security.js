@@ -17,7 +17,7 @@ export function allowedOrigins() {
 
   return new Set(process.env.NODE_ENV === 'production'
     ? (configured.length > 0 ? configured : ['http://localhost:3000'])
-    : [...configured, 'http://localhost:3000', 'http://localhost:5173']);
+    : [...configured, 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001']);
 }
 
 export function corsOrigin(origin, callback) {

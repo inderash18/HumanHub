@@ -1,6 +1,7 @@
 import { corsOrigin, jwtSecret } from './config/security.js';
 import dotenv from 'dotenv';
 dotenv.config();
+// Local automatic AI origin detection ready
 
 import { createServer } from 'http';
 import { Server } from 'socket.io';

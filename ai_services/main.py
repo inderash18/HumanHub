@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from detectors.universal_fake_detect import UniversalFakeDetectAdapter
 from detectors.google_synthid import GoogleSynthIDAdapter
+from detectors.gemini_detector import GeminiDetector
 from provenance.c2pa_verifier import C2PAVerifier
 from metadata.extractor import MetadataExtractor
 from engine.decision_policy import DecisionEngine, AnalysisReport
@@ -27,6 +28,7 @@ logger = logging.getLogger("ai_service")
 # Global engine instances
 detector = UniversalFakeDetectAdapter(device=os.getenv("DEVICE", "cpu"))
 google_synthid = GoogleSynthIDAdapter()
+gemini_detector = GeminiDetector()
 c2pa_verifier = C2PAVerifier()
 metadata_extractor = MetadataExtractor()
 decision_engine = DecisionEngine()
@@ -111,20 +113,23 @@ except Exception:
 
 def _run_full_analysis(image_bytes: bytes, content_type: str) -> AnalysisReport:
     """Synchronous CPU/IO analysis execution for offloading to worker thread."""
-    # 1. Google SynthID provider check
+    # 1. Authoritative Gemini AI origin detection
+    gemini_res = gemini_detector.analyze(image_bytes, mime_type=content_type)
+
+    # 2. Google SynthID provider check (advisory)
     google_res = google_synthid.verify_watermark(image_bytes, mime_type=content_type)
 
-    # 2. C2PA Provenance check on original unaltered bytes
+    # 3. C2PA Provenance check on original unaltered bytes (advisory)
     provenance_res = c2pa_verifier.verify(image_bytes, mime_type=content_type)
 
-    # 3. Metadata extraction & sanitization (EXIF / XMP / IPTC)
+    # 4. Metadata extraction & sanitization (EXIF / XMP / IPTC) (advisory)
     metadata_res = metadata_extractor.extract(image_bytes, mime_type=content_type)
 
-    # 4. UniversalFakeDetect real model inference
+    # 5. UniversalFakeDetect real model inference (advisory)
     detector_res = detector.predict(image_bytes, mime_type=content_type)
 
-    # 5. Versioned decision policy synthesis & publication decision
-    return decision_engine.evaluate(provenance_res, metadata_res, detector_res, google_res)
+    # 6. Versioned decision policy synthesis & publication decision (Gemini is sole blocker)
+    return decision_engine.evaluate(provenance_res, metadata_res, detector_res, google_res, gemini_res)
 
 AI_SERVICE_SECRET = os.getenv("AI_SERVICE_SECRET")
 
@@ -132,6 +137,7 @@ def verify_auth_header(x_internal_secret: Optional[str] = Header(None)):
     if AI_SERVICE_SECRET and x_internal_secret != AI_SERVICE_SECRET:
         raise HTTPException(status_code=401, detail="Unauthorized: invalid or missing X-Internal-Secret header.")
 
+@app.post("/analyze", response_model=AnalysisReport, dependencies=[Depends(verify_auth_header)])
 @app.post("/analyze/image-origin", response_model=AnalysisReport, dependencies=[Depends(verify_auth_header)])
 async def analyze_image_origin(
     file: UploadFile = File(...)

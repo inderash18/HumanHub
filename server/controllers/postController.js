@@ -65,19 +65,10 @@ export const createPost = asyncHandler(async (req, res) => {
         throw new Error(`Publication blocked: ${analysis.decisionReason || 'AI-generated or generatively edited media detected.'}`);
       }
 
-      if (analysis.publicationDecision === 'HELD_FOR_REVIEW') {
-        res.status(403);
-        throw new Error(`Publication held: This image needs review before publishing. (${analysis.decisionReason || 'Held for moderator review.'})`);
-      }
-
-      if (analysis.publicationDecision === 'PENDING' || analysis.processingState === 'QUEUED' || analysis.processingState === 'RUNNING') {
-        res.status(422);
-        throw new Error('Media verification is still in progress. Please wait for checks to complete before publishing.');
-      }
-
-      if (analysis.publicationDecision !== 'ALLOWED') {
-        res.status(403);
-        throw new Error(`Media not approved for publishing. Status: ${analysis.publicationDecision}. Reason: ${analysis.decisionReason}`);
+      if (analysis.publicationDecision === 'HELD_FOR_REVIEW' || analysis.analysisOutcome === 'CHECK_UNAVAILABLE') {
+        postStatus = 'pending_review';
+      } else if (analysis.publicationDecision !== 'ALLOWED') {
+        postStatus = 'pending_review';
       }
 
       analysisDocIds.push(analysis._id);
@@ -97,9 +88,8 @@ export const createPost = asyncHandler(async (req, res) => {
   // Extract hashtags if present
   const extractedTags = tags || (contentText.match(/#[a-zA-Z0-9_]+/g) || []).map(t => t.slice(1).toLowerCase());
 
-  // Determine media type and status
+  // Determine media type and draft override
   let mediaType = 'text';
-  let postStatus = 'published';
   let moderationError = '';
 
   if (mediaList.length > 0) {
@@ -107,6 +97,10 @@ export const createPost = asyncHandler(async (req, res) => {
     mediaType = isVideo ? 'video' : 'image';
   } else {
     postStatus = 'pending_review';
+  }
+
+  if (req.body.status === 'draft' || req.body.isDraft) {
+    postStatus = 'draft';
   }
 
   const mediaItems = [];
@@ -232,16 +226,15 @@ export const getPosts = asyncHandler(async (req, res) => {
     followingRecords.forEach(f => followingSet.add(f.following.toString()));
   }
 
-  const postQuery = Post.find(query)
-    .populate('author', 'username displayName avatar bio privacySettings')
-    .populate('community', 'name slug icon')
-    .populate('mediaAnalysis')
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
-
   const [rawPosts, total] = await Promise.all([
-    typeof postQuery.lean === 'function' ? postQuery.lean() : postQuery,
+    Post.find(query)
+      .populate('author', 'username displayName avatar bio privacySettings')
+      .populate('community', 'name slug icon')
+      .populate('mediaAnalysis')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
     Post.countDocuments(query)
   ]);
 

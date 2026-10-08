@@ -32,26 +32,14 @@ export default function ImageOriginBadge({
     label = 'Checking image before publishing...';
     variant = 'pending';
     Icon = Loader2;
-  } else if (outcome === 'GOOGLE_AI_ORIGIN_DOCUMENTED') {
+  } else if (publicationDecision === 'BLOCKED') {
     Icon = AlertTriangle;
     variant = 'danger';
-    label = evidence?.badgeLabel || 'Google AI generation detected';
-  } else if (outcome === 'GOOGLE_AI_EDITING_DOCUMENTED') {
+    label = evidence?.badgeLabel || 'Gemini detected likely AI-generated image';
+  } else if (outcome === 'GOOGLE_AI_ORIGIN_DOCUMENTED' || outcome === 'AI_ORIGIN_DOCUMENTED' || outcome === 'GOOGLE_AI_EDITING_DOCUMENTED' || outcome === 'AI_EDITING_DOCUMENTED') {
     Icon = Sparkles;
     variant = 'info';
-    label = evidence?.badgeLabel || 'Google AI editing detected';
-  } else if (outcome === 'AI_ORIGIN_DOCUMENTED') {
-    Icon = AlertTriangle;
-    variant = 'danger';
-    label = evidence?.badgeLabel || 'AI origin documented';
-  } else if (outcome === 'AI_EDITING_DOCUMENTED') {
-    Icon = Sparkles;
-    variant = 'info';
-    label = evidence?.badgeLabel || 'AI editing documented';
-  } else if (outcome === 'LIKELY_AI_GENERATED') {
-    Icon = AlertTriangle;
-    variant = 'warning';
-    label = evidence?.badgeLabel || 'Likely AI-generated';
+    label = evidence?.badgeLabel || 'Content Credentials detected AI provenance';
   } else if (outcome === 'LIKELY_AUTHENTIC' || outcome === 'NO_STRONG_AI_SIGNALS') {
     if (evidence?.cameraOriginVerified) {
       Icon = Camera;
@@ -59,17 +47,17 @@ export default function ImageOriginBadge({
       label = evidence?.badgeLabel || 'Camera capture documented';
     } else {
       Icon = ShieldCheck;
-      variant = 'verified';
-      label = evidence?.badgeLabel || 'Likely authentic';
+      variant = evidence?.badgeVariant || 'verified';
+      label = evidence?.badgeLabel || 'Likely real image';
     }
   } else if (outcome === 'INCONCLUSIVE') {
     Icon = HelpCircle;
     variant = 'neutral';
-    label = evidence?.badgeLabel || 'This image needs review';
+    label = evidence?.badgeLabel || 'Inconclusive (advisory)';
   } else if (processingState === 'FAILED' || outcome === 'CHECK_UNAVAILABLE') {
     Icon = Info;
-    variant = 'unavailable';
-    label = evidence?.badgeLabel || 'Image check unavailable';
+    variant = 'neutral';
+    label = evidence?.badgeLabel || 'Gemini verification unavailable, post allowed';
   }
 
   const variantStyles = {

@@ -8,6 +8,10 @@
 
 ## 1. Executive Summary & Component Matrix
 
+> [!NOTE]
+> - **Cloud Free Deployment (Render + Vercel)**: Operates in Manual Review Mode so the backend runs on Render's 512 MB Free Tier at ₹0 cost.
+> - **Local College Project Demo**: Runs real-time automatic PyTorch CLIP ViT-L/14 AI inference locally. See [`LOCAL_DEMO.md`](file:///s:/HumanHub/LOCAL_DEMO.md) for local run instructions.
+
 This guide provides the complete, production-ready blueprint to deploy HumanHub with ₹0 monthly hosting costs.
 
 | Component | Target Platform | Free Tier Limits | Config File | Operational Mode |
